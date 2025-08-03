@@ -135,6 +135,13 @@ class PerformExtraction:
                 dataset_id=dataset.dataset_id,
                 status="SUCCEEDED",
             )
+            
+            column_meta_data_details = orch_process.get_ctl_column_metadata(
+                dataset_id=dataset.dataset_id
+            )
+            column_meta_data_source_column_names: list[str] = [
+            x.source_column_name.lower() for x in column_meta_data_details
+        ]
 
             inbound_path = dataset.inbound_location
             landing_path = dataset.landing_location
@@ -190,6 +197,30 @@ class PerformExtraction:
                                 new_file,
                             )
                         )
+                    dataframe_columns = [x.lower() for x in df.columns]
+                    if column_meta_data_source_column_names != dataframe_columns:
+                        orch_process.insert_log_raw_process_detail(
+                        log_raw_process_dtl=logRawProcessDtl(
+                            process_id=self.process_id,
+                            dataset_id=dataset.dataset_id,
+                            source_file=new_file,
+                            landing_location=dataset.landing_location,
+                            file_status="FAILED",
+                            exception_details=f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File.",
+                            file_process_start_time=start_time,
+                            file_process_end_time=datetime.now(),
+                        )
+                    )
+                        raise Exception(
+                                f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File."
+                            )
+                    df = df.select(
+                                [
+                                    col(column).cast("string").alias(column)
+                                    for column in df.columns
+                                ]
+                            )
+                    
                     df = df.withColumn("batch_id", lit(batch_id))
                     df.write.format("delta").mode("append").partitionBy(
                                 dataset.landing_partition_columns.split(",")
