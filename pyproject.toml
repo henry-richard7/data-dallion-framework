@@ -1,0 +1,36 @@
+[project]
+name = "data-dallion-framework"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.40.1",
+    "jsonpath-ng>=1.7.0",
+    "jwt>=1.4.0",
+    "niquests>=3.14.1",
+    "paramiko>=3.5.1",
+    "polars>=1.32.0",
+    "pydantic-settings>=2.10.1",
+    "sqlmodel>=0.0.24",
+]
+
+[project.scripts]
+data-dallion-framework = "data_dallion_framework:main"
+
+[project.optional-dependencies]
+extras = [
+    "pyspark>=4.0.0",
+]
+sql-backend = [
+    "mariadb>=1.1.13",
+]
+
+[build-system]
+requires = ["uv_build>=0.8.4,<0.9.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.30.0",
+]
