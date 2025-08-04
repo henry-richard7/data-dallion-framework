@@ -19,7 +19,7 @@ from pyspark.sql.functions import col, lit
 
 
 
-class PerformExtraction:
+class PerformBronze:
     def __init__(self, spark: SparkSession, process_id):
         self.spark: SparkSession = spark
         self.process_id = process_id
