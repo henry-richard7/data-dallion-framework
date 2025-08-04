@@ -12,3 +12,4 @@ wheels/
 # Test locations
 tests/compute/*
 tests/inbound/*
+tests/publish/*

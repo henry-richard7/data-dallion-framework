@@ -1,0 +1,1336 @@
+from datetime import datetime
+from pyspark.sql.functions import col, lit, length
+from pyspark.sql import DataFrame
+from pyspark.sql import SparkSession
+from ast import literal_eval
+
+from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats
+
+
+class DataQualityCheck:
+    def null_check_dqm(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        total_count: int,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            null_check_dqm_ = input_df.filter(col(column_name).isNotNull()).filter(
+                filter_cols
+            )
+        else:
+            null_check_dqm_ = input_df.filter(col(column_name).isNotNull())
+
+        failure_count = total_count - null_check_dqm_.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(null_check_dqm_)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("NULL"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("fail_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": null_check_dqm_,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def length_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        qc_param,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+        param_exp = "".join([x for x in qc_param if not x.isdigit()])
+        param_value = int("".join([x for x in qc_param if x.isdigit()]))
+
+        if param_exp == ">=":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__ge__(param_value)
+            )
+
+        elif param_exp == "<=":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__le__(param_value),
+            )
+
+        elif param_exp == ">":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__gt__(param_value),
+            )
+
+        elif param_exp == "<":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__lt__(param_value),
+            )
+
+        elif param_exp == "=":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__eq__(param_value),
+            )
+
+        elif param_exp == "!=":
+            length_validation_df = input_df.filter(
+                length(col(column_name)).__ne__(param_value),
+            )
+
+        else:
+            raise Exception(
+                "qc_param is missing. qc_param is required for LENGTH DQM check."
+            )
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            length_validation_df = length_validation_df.filter(filter_cols)
+
+        failure_count = total_count - length_validation_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(length_validation_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("LENGTH"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("fail_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": length_validation_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def length_range_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        qc_param,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+        range_list = literal_eval(qc_param)
+        param_value_lower = min(range_list)
+        param_value_greater = max(range_list)
+
+        length_range_dqm_df = input_df.filter(
+            (length(col(column_name)).__ge__(param_value_lower))
+            & (length(col(column_name)).__le__(param_value_greater)),
+        )
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            length_range_dqm_df = length_range_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - length_range_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(length_range_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("LENGTH-RANGE"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("fail_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": length_range_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def date_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        qc_param,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+        date_regex_pattern = RegexDateFormats.get_date_regex(qc_param=qc_param)
+
+        date_dqm_df = input_df.filter(col(column_name).rlike(date_regex_pattern))
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            date_dqm_df = date_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - date_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(date_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("DATE"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("fail_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": date_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def integer_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+
+        integer_dqm_df = input_df.filter(
+            col(column_name).rlike(RegexDateFormats.INTEGER_REGEX)
+        )
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            integer_dqm_df = integer_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - integer_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(integer_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("INTEGER"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("failed_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": integer_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def decimal_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+
+        decimal_dqm_df = input_df.filter(
+            col(column_name).rlike(RegexDateFormats.DECIMAL_REGEX)
+        )
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            decimal_dqm_df = decimal_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - decimal_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(decimal_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("DECIMAL"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("failed_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": decimal_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def regex_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        qc_param: str,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+
+        regex_dqm_df = input_df.filter(col(column_name).rlike(qc_param))
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            regex_dqm_df = regex_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - regex_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(regex_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("REGEX"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("failed_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": regex_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def domain_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        qc_param: str,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+    ) -> dict:
+
+        domain_dqm_df = input_df.filter(col(column_name).isin(qc_param.split(",")))
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            domain_dqm_df = domain_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - domain_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(domain_dqm_df)
+            failed_records = (
+                failed_records.withColumn("dqm_check_type", lit("DOMAIN"))
+                .withColumn("failed_column_name", lit(column_name))
+                .withColumn("failed_value", col(column_name))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(failure_path)
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": domain_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def custom_dqm_check(
+        self,
+        input_df: DataFrame,
+        qc_param: str,
+        qc_id,
+        total_count,
+        dataset_id: int,
+        error_threshold: int,
+        failure_path: str,
+    ) -> dict:
+        input_df.createOrReplaceTempView(f"table_{qc_id}")
+        custom_dqm_df = self.spark.sql(qc_param)
+
+        failure_count = total_count - custom_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = input_df.subtract(custom_dqm_df)
+
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(f"{failure_path}/custom_dqm_failures/")
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": custom_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def unique_dqm_check(
+        self,
+        input_df: DataFrame,
+        column_name: str,
+        total_count,
+        error_threshold: int,
+        qc_filter: str,
+        qc_id: int,
+        dataset_id: int,
+        failure_path: str,
+        batch_id: int,
+    ) -> dict:
+
+        unique_dqm_df = input_df.dropDuplicates(column_name.split(","))
+
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+            unique_dqm_df = unique_dqm_df.filter(filter_cols)
+
+        failure_count = total_count - unique_dqm_df.count()
+
+        if failure_count != 0:
+            failed_records = (
+                input_df.groupBy(column_name.split(",")).count().filter("count>1")
+            ).withColumn("batch_id", lit(batch_id))
+            failed_records.show()
+            failed_records.write.format("delta").mode("append").partitionBy(
+                "batch_id"
+            ).save(f"{failure_path}/unique_dqm_failures/")
+
+        if total_count > 0:
+            failure_percentage = (failure_count / total_count) * 100
+        else:
+            failure_percentage = 0
+
+        if failure_percentage >= error_threshold:
+            return {
+                "df": None,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": False,
+            }
+        else:
+            return {
+                "df": unique_dqm_df,
+                "error_count": failure_count,
+                "error_percentage": failure_percentage,
+                "success": True,
+            }
+
+    def blank_dqm_check(
+        self,
+        input_df: DataFrame,
+        qc_id: int,
+        dataset_id: int,
+        qc_filter: str,
+    ) -> dict:
+        if qc_filter:
+            filter_cols = qc_filter.split(",")
+            filter_cols = " AND ".join(filter_cols)
+
+            input_df = input_df.filter(filter_cols)
+
+        if not input_df.isEmpty():
+            return {
+                "df": input_df,
+                "error_count": 0,
+                "error_percentage": 0,
+                "success": False,
+            }
+        else:
+            return {
+                "df": None,
+                "error_count": None,
+                "error_percentage": 100,
+                "success": False,
+            }
+
+    def start_dqm_check(self):
+        if len(self.dqm_unprocessed_files) != 0:
+            for data_standardisation_log in self.dqm_unprocessed_files:
+                start_time = datetime.now()
+                batch_id = data_standardisation_log.batch_id
+
+                file_df = (
+                    self.spark.read.format("delta")
+                    .load(self.data_standardisation_location)
+                    .filter(col("batch_id") == batch_id)
+                )
+                original_df = file_df
+
+                for dqm_master in self.dqm_masters:
+                    total_count = file_df.count()
+                    if dqm_master.qc_type == "Null":
+                        response = self.null_check_dqm(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                            failure_path=self.dqm_location,
+                        )
+                        if response["success"] == True:
+                            file_df: DataFrame = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+                            if dqm_master.criticality == "C":
+
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Unique":
+
+                        response = self.unique_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                            failure_path=self.dqm_location,
+                            batch_id=batch_id,
+                        )
+                        if response["success"] == True:
+                            file_df = response["df"]
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Date":
+                        response = self.date_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            qc_param=dqm_master.qc_param,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+
+                        if response["success"] == True:
+                            file_df = response["df"]
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Integer":
+                        response = self.integer_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+
+                        if response["success"] == True:
+                            file_df = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Decimal":
+                        response = self.decimal_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+                        if response["success"] == True:
+                            file_df = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Regex":
+                        response = self.regex_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            qc_param=dqm_master.qc_param,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+
+                        if response["success"] == True:
+                            file_df = response["df"]
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Domain":
+                        response = self.domain_dqm_check(
+                            input_df=file_df,
+                            column_name=dqm_master.column_name,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            qc_param=dqm_master.qc_param,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+                        if response["success"] == True:
+                            file_df = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Custom":
+                        response = self.custom_dqm_check(
+                            input_df=file_df,
+                            total_count=total_count,
+                            error_threshold=dqm_master.criticality_threshold_pct,
+                            qc_id=dqm_master.qc_id,
+                            qc_param=dqm_master.qc_param,
+                            dataset_id=self.dataset_id,
+                        )
+
+                        if response["success"] == True:
+                            file_df = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                    elif dqm_master.qc_type == "Blank":
+                        response = self.blank_dqm_check(
+                            input_df=file_df,
+                            qc_id=dqm_master.qc_id,
+                            dataset_id=self.dataset_id,
+                            qc_filter=dqm_master.qc_filter,
+                        )
+
+                        if response["success"] == True:
+                            file_df = response["df"]
+
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status="SUCCEEDED",
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                        else:
+                            with (
+                                OrchestrationProcess.OrchestrationProcess() as orch_process
+                            ):
+                                orch_process.insert_log_dqm_dtl(
+                                    process_id=self.process_id,
+                                    dataset_id=self.dataset_id,
+                                    batch_id=batch_id,
+                                    source_file=data_standardisation_log.source_file,
+                                    column_name=dqm_master.column_name,
+                                    qc_type=dqm_master.qc_type,
+                                    qc_param=dqm_master.qc_param,
+                                    qc_filter=dqm_master.qc_filter,
+                                    criticality=dqm_master.criticality,
+                                    criticality_threshold_pct=dqm_master.criticality_threshold_pct,
+                                    error_count=response["error_count"],
+                                    error_pct=response["error_percentage"],
+                                    status=(
+                                        "FAILED"
+                                        if dqm_master.criticality == "C"
+                                        else "SUCCEEDED"
+                                    ),
+                                    dqm_start_time=start_time,
+                                    dqm_end_time=datetime.now(),
+                                )
+
+                            if dqm_master.criticality == "C":
+                                raise Exception(
+                                    f"Error Threshold exceeds Criticality Threshold for Dataset ID {self.dataset_id} For Column Name: {dqm_master.column_name} For DQM Type {dqm_master.qc_type}"
+                                )
+
+                file_df = file_df.withColumn("batch_id", lit(batch_id))
+
+                if dqm_master.criticality == "C":
+
+                    file_df.write.format("delta").mode("append").partitionBy(
+                        self.staging_partition_columns
+                    ).save(self.staging_location)
+
+                    publish_path = self.publish_location
+                    file_df.write.format("delta").mode("append").partitionBy(
+                        self.publish_partition_columns
+                    ).save(publish_path)
+
+                elif dqm_master.criticality == "NC":
+
+                    original_df.write.format("delta").mode("append").partitionBy(
+                        self.staging_partition_columns
+                    ).save(self.staging_location)
+
+                    publish_path = self.publish_location
+                    original_df.write.format("delta").mode("append").partitionBy(
+                        self.publish_partition_columns
+                    ).save(publish_path)
+        else:
+            raise Exception(
+                f"DQM is already processed for Dataset ID: {self.dataset_id}."
+            )
+
+    def __init__(
+        self,
+        spark: SparkSession,
+        process_id,
+        dataset_id,
+        data_standardisation_location,
+        dqm_location,
+        staging_location,
+        staging_partition_columns,
+        publish_location,
+        publish_partition_columns,
+    ):
+        self.spark: SparkSession = spark
+        self.process_id = process_id
+        self.dataset_id = dataset_id
+        self.data_standardisation_location = data_standardisation_location
+        self.dqm_location = dqm_location
+        self.staging_location = staging_location
+        self.staging_partition_columns = staging_partition_columns
+        self.publish_location = publish_location
+        self.publish_partition_columns = publish_partition_columns
+
+        with OrchestrationProcess.OrchestrationProcess() as orch_process:
+
+            dqm_unprocessed_files = orch_process.get_dqm_unprocessed_files(
+                process_id=process_id,
+                dataset_id=dataset_id,
+            )
+
+            self.dqm_unprocessed_files = dqm_unprocessed_files
+
+            dqm_masters = orch_process.get_dqm_master_dtl(
+                process_id=process_id, dataset_id=dataset_id
+            )
+            self.dqm_masters = dqm_masters
+
+        if len(dqm_masters) != 0:
+            self.start_dqm_check()
+        else:
+
+            if len(dqm_unprocessed_files) != 0:
+
+                for data_standardisation_log in dqm_unprocessed_files:
+                    start_time = datetime.now()
+                    batch_id = data_standardisation_log.batch_id
+                    file_df = (
+                        spark.read.format("delta")
+                        .load(data_standardisation_location)
+                        .filter(col("batch_id") == batch_id)
+                    )
+
+                    file_df.write.format("delta").mode("append").partitionBy(
+                        staging_partition_columns
+                    ).save(staging_location)
+
+                    publish_path = publish_location
+                    file_df.write.format("delta").mode("append").partitionBy(
+                        publish_partition_columns
+                    ).save(publish_path)
+
+                    with OrchestrationProcess.OrchestrationProcess() as orch_process:
+                        orch_process.insert_log_dqm_dtl(
+                            process_id=process_id,
+                            dataset_id=dataset_id,
+                            batch_id=batch_id,
+                            source_file=data_standardisation_log.source_file,
+                            status="SUCCEEDED",
+                            dqm_start_time=start_time,
+                            dqm_end_time=datetime.now(),
+                        )
+            else:
+                with OrchestrationProcess.OrchestrationProcess() as orch_process:
+                    orch_process.insert_log_dqm_dtl(
+                        process_id=process_id,
+                        dataset_id=dataset_id,
+                        batch_id=None,
+                        source_file=None,
+                        status="FAILED",
+                        dqm_start_time=start_time,
+                        dqm_end_time=datetime.now(),
+                        exception_details=f"DQM is already processed for Dataset ID: {dataset_id}.",
+                    )
+                raise Exception(
+                    f"DQM is already processed for Dataset ID: {dataset_id}."
+                )
