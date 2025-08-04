@@ -12,7 +12,6 @@ from pyspark.sql import SparkSession
 
 class SilverLayerProcess:
     def _handle_silver_layer_process(self, dataset_master: DatasetMaster.ctlDatasetMaster):
-        landing_start_time = time()
 
         DataStandardization_start_time = time()
         DataStandardization.DataStandardization(
@@ -27,7 +26,7 @@ class SilverLayerProcess:
             (time() - DataStandardization_start_time) / 3600, 6
         )
         print(
-            f"\t Data Standardization completed in {DataStandardization_end_time} Hours."
+            f"\t Data Standardization for Dataset ID {dataset_master.dataset_id} completed in {DataStandardization_end_time} Hours."
         )
 
         DataQualityCheck_start_time = time()
@@ -45,7 +44,7 @@ class SilverLayerProcess:
         DataQualityCheck_end_time = round(
             (time() - DataQualityCheck_start_time) / 3600, 6
         )
-        print(f"\t Data Quality Check completed in {DataQualityCheck_end_time} Hours.")
+        print(f"\t Data Quality Check for Dataset ID {dataset_master.dataset_id} completed in {DataQualityCheck_end_time} Hours.")
 
         # StagingDDL_start_time = time()
         # StagingDDL.StagingDDL(
