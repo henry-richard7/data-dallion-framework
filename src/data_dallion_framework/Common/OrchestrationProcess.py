@@ -579,7 +579,7 @@ class OrchestrationProcess:
 
         This method queries the database to fetch all entries from `ctlTransformationDependencyMaster`
         that match the provided `process_id` and `dataset_id`. The results are ordered by the
-        `transformation_step` field in ascending order.
+        `transformation_sequence` field in ascending order.
 
         Args:
             process_id (int): The ID of the process associated with the transformation dependencies.
@@ -596,7 +596,7 @@ class OrchestrationProcess:
                 (ctlTransformationDependencyMaster.process_id == process_id)
                 & (ctlTransformationDependencyMaster.dataset_id == dataset_id)
             )
-            .order_by(ctlTransformationDependencyMaster.transformation_step)
+            .order_by(ctlTransformationDependencyMaster.transformation_sequence)
         )
         results = self.session.exec(query).all()
         return results

@@ -1,31 +1,30 @@
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Text
 from typing import Optional
-
+    
 class ctlTransformationDependencyMaster(SQLModel, table=True):
-    """
-    Stores transformation dependencies between datasets.
+    """Stores transformation dependencies between datasets.
     Defines join logic, primary keys, and custom queries used during transformations.
     """
 
     process_id: int = Field(
-        primary_key=True, description="ID of the transformation process."
-    )
-    transformation_step: Optional[str] = Field(
-        default=None,
-        description="Order of transformation step (e.g., 'JOIN', 'AGGREGATE').",
-        sa_column=Column(Text),
+        primary_key=True, description="ID of the transformation process.",index=True
     )
     dataset_id: int = Field(
-        primary_key=True, description="ID of the current dataset being transformed."
+        primary_key=True, description="ID of the current dataset being transformed." ,index=True
     )
-    depedent_dataset_id: int = Field(
+    dependent_dataset_id  : int = Field(
         primary_key=True,
-        description="ID of the dependent dataset needed for transformation.",
+        description="ID of the dependent dataset needed for transformation.", index=True
+    )
+    transformation_sequence: int = Field(
+        default=None,
+        description="Order of transformation step sequence.",
+        sa_column=Column(Text),
     )
     transformation_type: Optional[str] = Field(
         default=None,
-        description="Type of transformation logic (e.g., JOIN, UNION, CUSTOM).",
+        description="Type of transformation logic (e.g., JOIN, UNION, AGGREGATE , CUSTOM).",
         sa_column=Column(Text),
     )
     join_how: Optional[str] = Field(
@@ -48,6 +47,21 @@ class ctlTransformationDependencyMaster(SQLModel, table=True):
         description="List of primary keys for the resulting transformed dataset.",
         sa_column=Column(Text),
     )
+    group_by_columns:Optional[str] = Field(
+        default=None,
+        description="List of group by for the resulting transformed dataset.",
+        sa_column=Column(Text),
+    )
+    measure_columns:Optional[str] = Field(
+        default=None,
+        description="List of group by for the resulting transformed dataset.",
+        sa_column=Column(Text),
+    )
+    extra_values: Optional[str] = Field(
+        default=None,
+        description="Additional parameters such as CASE or hardcode value to be added.",
+        sa_column=Column(Text),
+    )
     custom_transformation_type: Optional[str] = Field(
         default="SQL",
         description="The type of custom transformation. i.e Databricks-SQL or Python code or Databricks Notebook.",
@@ -63,8 +77,4 @@ class ctlTransformationDependencyMaster(SQLModel, table=True):
         description="Custom Transformation Script Path.",
         sa_column=Column(Text),
     )
-    extra_values: Optional[str] = Field(
-        default=None,
-        description="Additional parameters or metadata required for the transformation.",
-        sa_column=Column(Text),
-    )
+    

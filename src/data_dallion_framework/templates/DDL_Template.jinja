@@ -1,0 +1,23 @@
+CREATE TABLE IF NOT EXISTS {{env}}_{{ table_name }} (
+    {% for column in columns %}
+    {{ column.name }} {{ column.type }}{% if not loop.last %},{% endif %}
+    {% endfor %}
+)
+USING DELTA
+{% if partition_by %}
+PARTITIONED BY (
+    {% for partition_column in partition_by %}
+    {{ partition_column }}{% if not loop.last %}, {% endif %}
+    {% endfor %}
+)
+{% endif %}
+{% if location %}
+LOCATION '{{ location }}'
+{% endif %}
+{% if tblproperties %}
+TBLPROPERTIES (
+    {% for key, value in tblproperties.items() %}
+    '{{ key }}' = '{{ value }}'{% if not loop.last %}, {% endif %}
+    {% endfor %}
+)
+{% endif %};

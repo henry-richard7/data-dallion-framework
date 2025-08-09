@@ -25,9 +25,7 @@ class SilverLayerProcess:
         DataStandardization_end_time = round(
             (time() - DataStandardization_start_time) / 3600, 6
         )
-        print(
-            f"\t Data Standardization for Dataset ID {dataset_master.dataset_id} completed in {DataStandardization_end_time} Hours."
-        )
+        
 
         DataQualityCheck_start_time = time()
         DataQualityCheck.DataQualityCheck(
@@ -44,7 +42,6 @@ class SilverLayerProcess:
         DataQualityCheck_end_time = round(
             (time() - DataQualityCheck_start_time) / 3600, 6
         )
-        print(f"\t Data Quality Check for Dataset ID {dataset_master.dataset_id} completed in {DataQualityCheck_end_time} Hours.")
 
         # StagingDDL_start_time = time()
         # StagingDDL.StagingDDL(
@@ -66,7 +63,6 @@ class SilverLayerProcess:
         #     dataset_id=dataset_master.dataset_id,
         # ).execute_ddl(dataset_type="L1")
         # PublishDDLL_end_time = round((time() - PublishDDL_start_time) / 3600, 6)
-        # print(f"\t Publish DDL completed in {PublishDDLL_end_time} Hours.")
 
     def __init__(self, spark: SparkSession, process_id):
         self.spark: SparkSession = spark

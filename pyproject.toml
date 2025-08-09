@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.40.1",
+    "jinja2>=3.1.6",
     "jsonpath-ng>=1.7.0",
     "jwt>=1.4.0",
     "niquests>=3.14.1",
@@ -21,6 +22,7 @@ data-dallion-framework = "data_dallion_framework:main"
 [project.optional-dependencies]
 extras = [
     "pyspark>=4.0.0",
+    "delta-spark"
 ]
 sql-backend = [
     "mariadb>=1.1.13",
