@@ -23,9 +23,9 @@ class SilverLayerProcess:
             data_standardisation_partition_columns=dataset_master.data_standardisation_partition_columns,
         )
         DataStandardization_end_time = round(
-            (time() - DataStandardization_start_time) / 3600, 6
+            (time() - DataStandardization_start_time) / 60,2
         )
-        
+        print(f"Data Standardization Completed for {dataset_master.dataset_id} in {DataStandardization_end_time} Minutes.")
 
         DataQualityCheck_start_time = time()
         DataQualityCheck.DataQualityCheck(

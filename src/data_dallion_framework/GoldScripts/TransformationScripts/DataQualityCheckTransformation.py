@@ -165,7 +165,7 @@ class DataQualityCheckTransformation:
         for log in self.dqm_unprocessed_files:
             start_time = datetime.now()
             batch_id = log.batch_id
-            df = self.spark.read.format("delta").load(self.transformation_location).filter(col("batch_id") == batch_id)
+            df = self.spark.read.format("delta").load(self.transformation_location)
             
             original_df = df
 
@@ -198,7 +198,7 @@ class DataQualityCheckTransformation:
         for log in self.dqm_unprocessed_files:
             start_time = datetime.now()
             batch_id = log.batch_id
-            df = self.spark.read.format("delta").load(self.transformation_location).filter(col("batch_id") == batch_id)
+            df = self.spark.read.format("delta").load(self.transformation_location)
             df = SchemaCaster.SchemaCaster(df=df, schema_config=self.column_metadata).perform_casting()
             self._write_data(df, batch_id)
             with OrchestrationProcess.OrchestrationProcess() as orch:
