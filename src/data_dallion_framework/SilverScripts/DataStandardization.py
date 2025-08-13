@@ -1,11 +1,12 @@
 from datetime import datetime
 from json import loads as json_loads
-from pyspark.sql import SparkSession
+from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import (
     col, substring, lpad, rpad, trim, regexp_replace, upper, lower, lit
 )
 from data_dallion_framework.Common import OrchestrationProcess
 from data_dallion_framework.Common.Models.Logs import logDataStandardisationDtl
+from data_dallion_framework.Common.Models.DataStandardisation import ctlDataStandardisationDtl
 
 
 class DataStandardization:
@@ -22,7 +23,7 @@ class DataStandardization:
 
         self.run_standardization()
 
-    def build_column_transformations(self, df, data_standards):
+    def build_column_transformations(self, df:DataFrame, data_standards:list[ctlDataStandardisationDtl]):
         """
         Creates a mapping of column_name → transformed_column_expression.
         All transformations are planned in one go for Spark optimization.
