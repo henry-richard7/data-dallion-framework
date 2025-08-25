@@ -221,6 +221,16 @@ class PerformBronze:
                                 ]
                             )
                     
+                    rename_mapping = {
+                                old: new
+                                for old, new in zip(
+                                    df.columns, column_meta_data_source_column_names
+                                )
+                            }
+
+                    for old_name, new_name in rename_mapping.items():
+                        df = df.withColumnRenamed(old_name, new_name)
+                    
                     df = df.withColumn("batch_id", lit(batch_id))
                     df.write.format("delta").mode("append").partitionBy(
                                 dataset.landing_partition_columns.split(",")

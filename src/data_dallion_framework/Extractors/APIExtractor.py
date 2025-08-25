@@ -418,8 +418,7 @@ class APIExtractor:
                         inbound_file_location=file_save_name,
                         status="SUCCEEDED",
                         start_time=start_time,
-                        end_time=datetime.now(),
-                    )
+                        end_time=datetime.now())
                     )
             except Exception as e:
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
@@ -434,8 +433,7 @@ class APIExtractor:
                         exception_details=traceback.format_exc(),
                         status="FAILED",
                         start_time=start_time,
-                        end_time=datetime.now(),
-                    )
+                        end_time=datetime.now())
                     )
                 raise
         else:

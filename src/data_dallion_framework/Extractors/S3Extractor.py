@@ -3,6 +3,7 @@ from botocore.client import Config
 from datetime import datetime
 from json import loads as json_loads
 from pathlib import Path
+import traceback
 
 from data_dallion_framework.Common import OrchestrationProcess, PatternValidator
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
@@ -89,33 +90,35 @@ class S3Extractor:
                                 OrchestrationProcess.OrchestrationProcess() as orch_process
                             ):
                                 orch_process.insert_log_data_acquisition_detail(
-                                    batch_id=batch_id,
-                                    process_id=process_id,
-                                    run_date=datetime.now().date(),
-                                    outbound_source_location=outbound_source_location,
-                                    inbound_file_location=file_save_name,
-                                    pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                                    status="SUCCEEDED",
-                                    start_time=start_time,
-                                    end_time=datetime.now(),
-                                )
+                                log_data_acquisition=logDataAcquisitionDetail(
+                                batch_id=batch_id,
+                                run_date=start_time.date(),
+                                process_id=process_id,
+                                pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                                outbound_source_location="S3",
+                                inbound_file_location=file_save_name,
+                                status="SUCCEEDED",
+                                start_time=start_time,
+                                end_time=datetime.now())
+                            )
                         except Exception as e:
                             with (
                                 OrchestrationProcess.OrchestrationProcess() as orch_process
                             ):
                                 orch_process.insert_log_data_acquisition_detail(
-                                    batch_id=batch_id,
-                                    process_id=process_id,
-                                    run_date=datetime.now().date(),
-                                    outbound_source_location=outbound_source_location,
-                                    inbound_file_location=file_save_name,
-                                    pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                                    status="FAILED",
-                                    exception_details=e,
-                                    start_time=start_time,
-                                    end_time=datetime.now(),
+                                log_data_acquisition=logDataAcquisitionDetail(
+                                batch_id=batch_id,
+                                run_date=start_time.date(),
+                                process_id=process_id,
+                                pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                                outbound_source_location="S3",
+                                inbound_file_location=None,
+                                exception_details=traceback.format_exc(),
+                                status="FAILED",
+                                start_time=start_time,
+                                end_time=datetime.now())
                                 )
-                            raise
+                                raise
 
                     else:
                         raise Exception(
