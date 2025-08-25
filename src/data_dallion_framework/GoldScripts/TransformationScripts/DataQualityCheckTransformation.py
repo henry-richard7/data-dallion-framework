@@ -56,11 +56,22 @@ class DataQualityCheckTransformation:
         failed = total - passed_df.count()
         return failed, (failed / total) * 100 if total else 0
 
-    def write_failed(self, input_df, passed_df, column, check_type, path):
-        failed = input_df.subtract(passed_df).withColumn("dqm_check_type", lit(check_type)) \
-            .withColumn("failed_column_name", lit(column)) \
-            .withColumn("fail_value", col(column)) \
-            .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+    def write_failed(self, input_df:DataFrame, passed_df:DataFrame, column, check_type, path):
+        if check_type != 'UNIQUE':
+            failed = input_df.subtract(passed_df).withColumn("dqm_check_type", lit(check_type)) \
+                .withColumn("failed_column_name", lit(column)) \
+                .withColumn("fail_value", col(column)) \
+                .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+        else:
+            columns = column.split(",")
+            failed = input_df.subtract(passed_df)\
+                .withColumn("dqm_check_type", lit(check_type))\
+                    .withColumn("failed_column_name", lit(",".join(columns)))
+            
+            for col_name in columns:
+                failed = failed.withColumn(f"fail_value_{col_name}", col(col_name))
+            failed = failed.select("dqm_check_type", "failed_column_name",*[f"fail_value_{c}" for c in columns],"batch_id")
+            
         failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
 
     def _prepare_result(self, df, fail_count, fail_pct, threshold):

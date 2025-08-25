@@ -31,12 +31,14 @@ class PerformTransformation:
         seen = set()
         columns_to_select = []
         for join_info in source_details:
+            
             for column in join_info["columns"]:
-                if column not in seen:
-                    seen.add(column)
-                    columns_to_select.append(
-                        f"{join_info['source_table_name']}.{column}"
-                    )
+                if join_info['transformation_type'] != 'AGGREGATE':
+                    if column not in seen:
+                        seen.add(column)
+                        columns_to_select.append(
+                            f"{join_info['source_table_name']}.{column}"
+                        )
         return columns_to_select
     
     def _read_and_filter_latest_batch(self, source_table_location, table_name):
@@ -50,7 +52,7 @@ class PerformTransformation:
             .where(col("batch_id") == col("max_batch_id"))
             .drop("max_batch_id")
             .drop("batch_id")
-            #.alias(table_name)
+            .alias(table_name)
         )
         
     def __init__(self, spark:SparkSession, process_id:int, dataset_id:int):
@@ -93,7 +95,7 @@ class PerformTransformation:
                 x.column_name for x in target_table_column_metadata_details
             ]
             
-            source_details = list()
+            source_details:list[dict[str,str]] = list()
             
             for transformation_depedency in transformation_depedencies:
                 dependent_dataset_details = orch_process.get_dataset_master(
@@ -145,14 +147,9 @@ class PerformTransformation:
                             elif source_detail['transformation_type'] == "JOIN":
                                 df_ = self._read_and_filter_latest_batch(source_table_location=source_detail['source_table_location'],table_name=source_detail["source_table_name"])
                                 
-                                #overlapping_cols = set(df.columns) & set(df_.columns)
-                                #overlapping_cols -= set(source_detail['right_table_columns'].split(","))
-                                
                                 left_cols = source_detail['left_table_columns'].split(",")
                                 right_cols = source_detail['right_table_columns'].split(",")
                                 
-                                # for overlapping_col in overlapping_cols:
-                                #     df_ = df_.withColumnRenamed(overlapping_col, f"{overlapping_col}_r")
                                 
                                 join_conditions = [df[l] == df_[r] for l, r in zip(left_cols, right_cols)]
                                 join_condition = reduce(operator.and_, join_conditions) if len(join_conditions) > 1 else join_conditions[0]
@@ -162,6 +159,10 @@ class PerformTransformation:
                                     on=join_condition,
                                     how=source_detail['join_how'].lower()
                                 )
+                                
+                                if source_details[-1] == source_detail:
+                                    columns_to_select = self._get_unique_columns(source_details)
+                                    df = df.select(columns_to_select)
                             
                             elif source_detail['transformation_type'] == "AGGREGATE":
                                 group_cols = source_detail['group_by_columns'].split(",")
@@ -180,7 +181,6 @@ class PerformTransformation:
                             elif source_detail['transformation_type'] == "CUSTOM":
                                 raise NotImplementedError()
                         
-                        print(df.columns)
                         final_result_df:DataFrame = df.select(*target_table_column_names)
                         final_result_df = final_result_df\
                             .withColumn("batch_id", lit(batch_id))\
