@@ -57,6 +57,7 @@ class DataQualityCheckTransformation:
         return failed, (failed / total) * 100 if total else 0
 
     def write_failed(self, input_df:DataFrame, passed_df:DataFrame, column, check_type, path):
+        print("Writing Failed records.")
         if check_type != 'UNIQUE':
             failed = input_df.subtract(passed_df).withColumn("dqm_check_type", lit(check_type)) \
                 .withColumn("failed_column_name", lit(column)) \

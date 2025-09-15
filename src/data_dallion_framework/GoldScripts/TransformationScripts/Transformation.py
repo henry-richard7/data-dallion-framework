@@ -127,7 +127,9 @@ class PerformTransformation:
                         "measure_columns":transformation_depedency.measure_columns
                     }
                 )
-                
+            
+            joining_tables = [j for j in source_details if j['transformation_type'] == 'JOIN']
+            
             if len(unprocessed_transformation_files) != 0:
                 for dqm_log in unprocessed_transformation_files:
                     try:
@@ -160,11 +162,14 @@ class PerformTransformation:
                                     how=source_detail['join_how'].lower()
                                 )
                                 
-                                if source_details[-1] == source_detail:
+                                if joining_tables[-1] == source_detail:
                                     columns_to_select = self._get_unique_columns(source_details)
                                     df = df.select(columns_to_select)
                             
                             elif source_detail['transformation_type'] == "AGGREGATE":
+                                if source_detail != source_details[-1]:
+                                    raise Exception("Aggregation must be performed after UNION or JOIN. Not before.")
+                                
                                 group_cols = source_detail['group_by_columns'].split(",")
                                 measures = json_loads(source_detail['measure_columns'])
                                 
