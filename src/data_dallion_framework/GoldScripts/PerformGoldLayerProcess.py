@@ -6,7 +6,7 @@ from time import time
 from pyspark.sql import SparkSession
 # from nextgenframework.Common import TransformationDDL, PublishDDL
 
-from data_dallion_framework.GoldScripts.TransformationScripts import PerformTransformation, DataQualityCheckTransformation, Transformation
+from data_dallion_framework.GoldScripts.TransformationScripts import DataQualityCheckTransformation, Transformation
 
 
 class GoldLayerProcess:
