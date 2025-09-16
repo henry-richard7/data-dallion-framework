@@ -1,2 +1,8 @@
-# Bugs
--   In unique checks even if there are no duplicates it still updates there are duplicates in log. Can be confirmed as there are not failed records are added to dqm failure location.s
+# Code Cleanup
+    - Remove backup codes.
+    - Remove old Gold Layer scripts
+
+# To Add Custom Transformation
+    - Should support direct sql from configuration table,
+    - Should support python script with pyspark code.
+    - Should support Notebooks incase of Databricks (Optional).
