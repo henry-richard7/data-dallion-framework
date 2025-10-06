@@ -11,7 +11,11 @@ from pathlib import Path
 import re
 import traceback
 
-from data_dallion_framework.Common import JsonDataMapper, FileNameGenerator, OrchestrationProcess
+from data_dallion_framework.Common import (
+    JsonDataMapper,
+    FileNameGenerator,
+    OrchestrationProcess,
+)
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 
@@ -260,17 +264,16 @@ class APIAutomation:
         # Making use of niquests multiplexed feature.
         with niquests.Session(multiplexed=True) as s:
             for to_perform_request in to_perform_requests:
-                responses.append(
-                    s.request(
-                        method=method,
-                        url=url,
-                        headers=headers if headers else None,
-                        params=params if params else None,
-                        data=to_perform_request if data else None,
-                        json=to_perform_request if json_body else None,
-                        verify=False,
-                    )
+                response_ = s.request(
+                    method=method,
+                    url=url,
+                    headers=headers if headers else None,
+                    params=params if params else None,
+                    data=to_perform_request if data else None,
+                    json=to_perform_request if json_body else None,
+                    verify=False,
                 )
+                responses.append(response_)
 
         return {"values_based_response": [r.json() for r in responses]}
 
@@ -368,13 +371,28 @@ class APIExtractor:
                 else:
                     temp_dict["url"] = api_connection_dtl.url
 
-                    if api_connection_dtl.headers is not None:
+                    if (
+                        api_connection_dtl.headers is not None
+                        and api_connection_dtl.headers != ""
+                    ):
                         temp_dict["headers"] = json_loads(api_connection_dtl.headers)
-                    if api_connection_dtl.params is not None:
+
+                    if (
+                        api_connection_dtl.params is not None
+                        and api_connection_dtl.params != ""
+                    ):
                         temp_dict["params"] = json_loads(api_connection_dtl.params)
-                    if api_connection_dtl.data is not None:
+
+                    if (
+                        api_connection_dtl.data is not None
+                        and api_connection_dtl.data != ""
+                    ):
                         temp_dict["data"] = json_loads(api_connection_dtl.data)
-                    if api_connection_dtl.json_body is not None:
+
+                    if (
+                        api_connection_dtl.json_body is not None
+                        and api_connection_dtl.json_body != ""
+                    ):
                         temp_dict["json_body"] = json_loads(
                             api_connection_dtl.json_body
                         )
@@ -410,30 +428,32 @@ class APIExtractor:
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(
                         log_data_acquisition=logDataAcquisitionDetail(
-                        batch_id=batch_id,
-                        run_date=start_time.date(),
-                        process_id=process_id,
-                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                        outbound_source_location="API",
-                        inbound_file_location=file_save_name,
-                        status="SUCCEEDED",
-                        start_time=start_time,
-                        end_time=datetime.now())
+                            batch_id=batch_id,
+                            run_date=start_time.date(),
+                            process_id=process_id,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            outbound_source_location="API",
+                            inbound_file_location=file_save_name,
+                            status="SUCCEEDED",
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
                     )
             except Exception as e:
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(
                         log_data_acquisition=logDataAcquisitionDetail(
-                        batch_id=batch_id,
-                        run_date=start_time.date(),
-                        process_id=process_id,
-                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                        outbound_source_location="API",
-                        inbound_file_location=None,
-                        exception_details=traceback.format_exc(),
-                        status="FAILED",
-                        start_time=start_time,
-                        end_time=datetime.now())
+                            batch_id=batch_id,
+                            run_date=start_time.date(),
+                            process_id=process_id,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            outbound_source_location="API",
+                            inbound_file_location=None,
+                            exception_details=traceback.format_exc(),
+                            status="FAILED",
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
                     )
                 raise
         else:
