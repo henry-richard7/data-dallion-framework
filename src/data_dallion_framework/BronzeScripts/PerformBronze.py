@@ -1,6 +1,12 @@
 from data_dallion_framework.Common import OrchestrationProcess, PatternValidator
-from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail, logRawProcessDtl
-from data_dallion_framework.Common.Models.Acquisition import ctlDataAcquisitionDetail, ctlDataAcquisitionConnectionMaster
+from data_dallion_framework.Common.Models.Logs import (
+    logDataAcquisitionDetail,
+    logRawProcessDtl,
+)
+from data_dallion_framework.Common.Models.Acquisition import (
+    ctlDataAcquisitionDetail,
+    ctlDataAcquisitionConnectionMaster,
+)
 from data_dallion_framework.Common.Models.DatasetMaster import ctlDatasetMaster
 
 from datetime import datetime
@@ -18,9 +24,9 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, lit
 
 
-
 class PerformBronze:
-    def __init__(self, spark: SparkSession, process_id):
+    def __init__(self, spark: SparkSession, process_id, env="dev"):
+        self.env = env
         self.spark: SparkSession = spark
         self.process_id = process_id
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
@@ -32,9 +38,7 @@ class PerformBronze:
                 dataset_type="BRONZE",
             )
 
-    def _handle_extraction(
-        self, dataAcquisitionDetail: ctlDataAcquisitionDetail
-    ):
+    def _handle_extraction(self, dataAcquisitionDetail: ctlDataAcquisitionDetail):
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             pre_ingestion_logs: logDataAcquisitionDetail = (
                 orch_process.get_log_data_acquisition_detail(
@@ -115,7 +119,7 @@ class PerformBronze:
                     pre_ingestion_dataset_name=dataAcquisitionDetail.pre_ingestion_dataset_name,
                     connection_config=connection_dtl.connection_config,
                 )
-                
+
     def _handle_raw_table_creation(self, dataset: ctlDatasetMaster):
         """
         Create a raw Delta table in the Bronze layer for files that have been ingested.
@@ -128,29 +132,28 @@ class PerformBronze:
         Raises:
             Exception: If no new unprocessed files are found matching the pattern.
         """
-        
+
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             ingestion_logs = orch_process.get_log_raw_process_dtl(
                 process_id=dataset.process_id,
                 dataset_id=dataset.dataset_id,
                 status="SUCCEEDED",
             )
-            
+
             column_meta_data_details = orch_process.get_ctl_column_metadata(
                 dataset_id=dataset.dataset_id
             )
             column_meta_data_source_column_names: list[str] = [
-            x.source_column_name.lower() for x in column_meta_data_details
-        ]
+                x.source_column_name.lower() for x in column_meta_data_details
+            ]
 
             inbound_path = dataset.inbound_location
             landing_path = dataset.landing_location
             file_pattern = dataset.inbound_file_pattern
 
-            
             files_in_inbound = [
-            f"{inbound_path.rstrip('/')}/{x}" for x in listdir(inbound_path)
-        ]
+                f"{inbound_path.rstrip('/')}/{x}" for x in listdir(inbound_path)
+            ]
             raw_completed_files = [x.source_file for x in ingestion_logs]
 
             new_files = set(files_in_inbound) - set(raw_completed_files)
@@ -163,7 +166,7 @@ class PerformBronze:
                 )
             ]
             if len(new_files) == 0:
-                
+
                 raise Exception("No new files found to create raw delta table.")
 
             for new_file in new_files:
@@ -200,55 +203,60 @@ class PerformBronze:
                     dataframe_columns = [x.lower() for x in df.columns]
                     if column_meta_data_source_column_names != dataframe_columns:
                         orch_process.insert_log_raw_process_detail(
-                        log_raw_process_dtl=logRawProcessDtl(
-                            process_id=self.process_id,
-                            dataset_id=dataset.dataset_id,
-                            source_file=new_file,
-                            landing_location=dataset.landing_location,
-                            file_status="FAILED",
-                            exception_details=f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File.",
-                            file_process_start_time=start_time,
-                            file_process_end_time=datetime.now(),
-                        )
-                    )
-                        raise Exception(
-                                f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File."
-                            )
-                    df = df.select(
-                                [
-                                    col(column).cast("string").alias(column)
-                                    for column in df.columns
-                                ]
-                            )
-                    
-                    rename_mapping = {
-                                old: new
-                                for old, new in zip(
-                                    df.columns, column_meta_data_source_column_names
-                                )
-                            }
-
-                    for old_name, new_name in rename_mapping.items():
-                        df = df.withColumnRenamed(old_name, new_name)
-                    
-                    df = df.withColumn("batch_id", lit(batch_id))
-                    df.write.format("delta").mode("append").partitionBy(
-                                dataset.landing_partition_columns.split(",")
-                            ).save(landing_path)
-                    orch_process.insert_log_raw_process_detail(
                             log_raw_process_dtl=logRawProcessDtl(
-                                batch_id=batch_id,
                                 process_id=self.process_id,
                                 dataset_id=dataset.dataset_id,
                                 source_file=new_file,
                                 landing_location=dataset.landing_location,
-                                file_status="SUCCEEDED",
-                                exception_details=None,
+                                file_status="FAILED",
+                                exception_details=f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File.",
                                 file_process_start_time=start_time,
                                 file_process_end_time=datetime.now(),
                             )
                         )
-                    
+                        raise Exception(
+                            f"Column Metadata Columns: {column_meta_data_source_column_names} || File Columns: {dataframe_columns} || Status: Columns not matching with Column Metadata and File."
+                        )
+                    df = df.select(
+                        [
+                            col(column).cast("string").alias(column)
+                            for column in df.columns
+                        ]
+                    )
+
+                    rename_mapping = {
+                        old: new
+                        for old, new in zip(
+                            df.columns, column_meta_data_source_column_names
+                        )
+                    }
+
+                    for old_name, new_name in rename_mapping.items():
+                        df = df.withColumnRenamed(old_name, new_name)
+
+                    df = df.withColumn("batch_id", lit(batch_id))
+                    if dataset.table_location_type.lower == "external":
+                        df.write.format("delta").mode("append").partitionBy(
+                            dataset.landing_partition_columns.split(",")
+                        ).save(landing_path)
+                    else:
+                        df.write.format("delta").mode("append").partitionBy(
+                            dataset.landing_partition_columns.split(",")
+                        ).saveAsTable(f"{self.env}.{dataset.landing_table}")
+
+                    orch_process.insert_log_raw_process_detail(
+                        log_raw_process_dtl=logRawProcessDtl(
+                            batch_id=batch_id,
+                            process_id=self.process_id,
+                            dataset_id=dataset.dataset_id,
+                            source_file=new_file,
+                            landing_location=dataset.landing_location,
+                            file_status="SUCCEEDED",
+                            exception_details=None,
+                            file_process_start_time=start_time,
+                            file_process_end_time=datetime.now(),
+                        )
+                    )
 
                 except Exception as e:
                     orch_process.insert_log_raw_process_detail(
@@ -263,7 +271,6 @@ class PerformBronze:
                             file_process_end_time=datetime.now(),
                         )
                     )
-                    
 
                     raise
 
@@ -281,12 +288,10 @@ class PerformBronze:
                     future.result()  # Wait for each thread to finish
                 except Exception as e:
                     raise
-                
+
         # Raw Inbound To Landing Table
         with ThreadPoolExecutor(
-            max_workers=min(
-                5, len(self.bronze_dataset_masters)
-            )
+            max_workers=min(5, len(self.bronze_dataset_masters))
         ) as executor:
             futures = [
                 executor.submit(self._handle_raw_table_creation, bronze_dataset_master)

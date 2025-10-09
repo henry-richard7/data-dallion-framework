@@ -4,13 +4,19 @@ from concurrent.futures import ThreadPoolExecutor
 
 from time import time
 from pyspark.sql import SparkSession
+
 # from nextgenframework.Common import TransformationDDL, PublishDDL
 
-from data_dallion_framework.GoldScripts.TransformationScripts import DataQualityCheckTransformation, Transformation
+from data_dallion_framework.GoldScripts.TransformationScripts import (
+    DataQualityCheckTransformation,
+    Transformation,
+)
 
 
 class GoldLayerProcess:
-    def _handle_gold_layer_process(self, dataset_master: DatasetMaster.ctlDatasetMaster):
+    def _handle_gold_layer_process(
+        self, dataset_master: DatasetMaster.ctlDatasetMaster
+    ):
 
         # TransformationDDL_start_time = time()
         # TransformationDDL.TransformationDDL(
@@ -29,6 +35,9 @@ class GoldLayerProcess:
             spark=self.spark,
             process_id=dataset_master.process_id,
             dataset_id=dataset_master.dataset_id,
+            transformation_table_name=dataset_master.transformation_table,
+            table_location_type=dataset_master.table_location_type,
+            env="dev",
         )
         transformation_end_time = round((time() - transformation_start_time) / 3600, 6)
 
@@ -41,6 +50,9 @@ class GoldLayerProcess:
             transformation_location=dataset_master.transformation_location,
             publish_location=dataset_master.publish_location,
             publish_partition_columns=dataset_master.publish_partition_columns,
+            publish_table_name=dataset_master.publish_table,
+            table_location_type=dataset_master.table_location_type,
+            env="dev",
         )
         DataQualityCheck_end_time = round(
             (time() - DataQualityCheck_start_time) / 3600, 6

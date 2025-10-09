@@ -3,8 +3,13 @@ from datetime import datetime
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.functions import col, lit, length
 from ast import literal_eval
-from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats, SchemaCaster
+from data_dallion_framework.Common import (
+    OrchestrationProcess,
+    RegexDateFormats,
+    SchemaCaster,
+)
 from data_dallion_framework.Common.Models import Logs, DqmMaster
+
 
 class DataQualityCheckTransformation:
     def __init__(
@@ -16,6 +21,9 @@ class DataQualityCheckTransformation:
         dqm_error_location,
         publish_location,
         publish_partition_columns,
+        publish_table_name,
+        table_location_type,
+        env="dev",
     ):
         self.spark = spark
         self.process_id = process_id
@@ -24,9 +32,13 @@ class DataQualityCheckTransformation:
         self.dqm_error_location = dqm_error_location
         self.publish_location = publish_location
         self.publish_partition_columns = publish_partition_columns
+        self.publish_table_name = publish_table_name
+        self.table_location_type = table_location_type
 
         with OrchestrationProcess.OrchestrationProcess() as orch:
-            self.dqm_unprocessed_files = orch.get_transformation_dqm_unprocessed_files(process_id, dataset_id)
+            self.dqm_unprocessed_files = orch.get_transformation_dqm_unprocessed_files(
+                process_id, dataset_id
+            )
             self.dqm_masters = orch.get_dqm_detail(process_id, dataset_id)
             self.column_metadata = orch.get_ctl_column_metadata(dataset_id=dataset_id)
 
@@ -56,23 +68,37 @@ class DataQualityCheckTransformation:
         failed = total - passed_df.count()
         return failed, (failed / total) * 100 if total else 0
 
-    def write_failed(self, input_df:DataFrame, passed_df:DataFrame, column, check_type, path):
+    def write_failed(
+        self, input_df: DataFrame, passed_df: DataFrame, column, check_type, path
+    ):
         print("Writing Failed records.")
-        if check_type != 'UNIQUE':
-            failed = input_df.subtract(passed_df).withColumn("dqm_check_type", lit(check_type)) \
-                .withColumn("failed_column_name", lit(column)) \
-                .withColumn("fail_value", col(column)) \
-                .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+        if check_type != "UNIQUE":
+            failed = (
+                input_df.subtract(passed_df)
+                .withColumn("dqm_check_type", lit(check_type))
+                .withColumn("failed_column_name", lit(column))
+                .withColumn("fail_value", col(column))
+                .select(
+                    "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+                )
+            )
         else:
             columns = column.split(",")
-            failed = input_df.subtract(passed_df)\
-                .withColumn("dqm_check_type", lit(check_type))\
-                    .withColumn("failed_column_name", lit(",".join(columns)))
-            
+            failed = (
+                input_df.subtract(passed_df)
+                .withColumn("dqm_check_type", lit(check_type))
+                .withColumn("failed_column_name", lit(",".join(columns)))
+            )
+
             for col_name in columns:
                 failed = failed.withColumn(f"fail_value_{col_name}", col(col_name))
-            failed = failed.select("dqm_check_type", "failed_column_name",*[f"fail_value_{c}" for c in columns],"batch_id")
-            
+            failed = failed.select(
+                "dqm_check_type",
+                "failed_column_name",
+                *[f"fail_value_{c}" for c in columns],
+                "batch_id",
+            )
+
         failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
 
     def _prepare_result(self, df, fail_count, fail_pct, threshold):
@@ -80,7 +106,7 @@ class DataQualityCheckTransformation:
             "df": None if fail_pct >= threshold else df,
             "error_count": fail_count,
             "error_percentage": fail_pct,
-            "success": fail_pct < threshold
+            "success": fail_pct < threshold,
         }
 
     def null_check(self, df, **kwargs):
@@ -90,9 +116,9 @@ class DataQualityCheckTransformation:
 
     def length_check(self, df, **kwargs):
         col_name, param = kwargs["column_name"], kwargs["qc_param"]
-        op = ''.join([c for c in param if not c.isdigit()])
-        val = int(''.join([c for c in param if c.isdigit()]))
-        ops = {">=": "ge", "<=" : "le", ">": "gt", "<": "lt", "=": "eq", "!=" : "ne"}
+        op = "".join([c for c in param if not c.isdigit()])
+        val = int("".join([c for c in param if c.isdigit()]))
+        ops = {">=": "ge", "<=": "le", ">": "gt", "<": "lt", "=": "eq", "!=": "ne"}
         df_valid = df.filter(getattr(length(col(col_name)), ops[op])(val))
         return self._run_check(df, df_valid, col_name, "LENGTH", **kwargs)
 
@@ -108,11 +134,13 @@ class DataQualityCheckTransformation:
         return self._run_check(df, df_valid, kwargs["column_name"], "DATE", **kwargs)
 
     def integer_check(self, df, **kwargs):
-        df_valid = df.filter(col(kwargs["column_name"]).rlike(r'^-?\d+$'))
+        df_valid = df.filter(col(kwargs["column_name"]).rlike(r"^-?\d+$"))
         return self._run_check(df, df_valid, kwargs["column_name"], "INTEGER", **kwargs)
 
     def decimal_check(self, df, **kwargs):
-        df_valid = df.filter(col(kwargs["column_name"]).rlike(r'^-?(\d+\.\d+|\d+|\.\d+)$'))
+        df_valid = df.filter(
+            col(kwargs["column_name"]).rlike(r"^-?(\d+\.\d+|\d+|\.\d+)$")
+        )
         return self._run_check(df, df_valid, kwargs["column_name"], "DECIMAL", **kwargs)
 
     def regex_check(self, df, **kwargs):
@@ -125,7 +153,9 @@ class DataQualityCheckTransformation:
         return self._run_check(df, df_valid, kwargs["column_name"], "DOMAIN", **kwargs)
 
     def custom_check(self, df, **kwargs):
-        self.spark.sql(f"CREATE OR REPLACE TEMP VIEW table_{kwargs['qc_id']} AS SELECT * FROM df")
+        self.spark.sql(
+            f"CREATE OR REPLACE TEMP VIEW table_{kwargs['qc_id']} AS SELECT * FROM df"
+        )
         df_valid = self.spark.sql(kwargs["qc_param"])
         return self._run_check(df, df_valid, "", "CUSTOM", **kwargs)
 
@@ -140,36 +170,51 @@ class DataQualityCheckTransformation:
             "df": None if df.isEmpty() else df,
             "error_count": None if df.isEmpty() else 0,
             "error_percentage": 100 if df.isEmpty() else 0,
-            "success": False
+            "success": False,
         }
 
     def _run_check(self, df, df_valid, column, check_type, **kwargs):
         df_valid = self.apply_qc_filter(df_valid, kwargs.get("qc_filter"))
-        fail_count, fail_pct = self.calculate_metrics(df, df_valid, kwargs["total_count"])
+        fail_count, fail_pct = self.calculate_metrics(
+            df, df_valid, kwargs["total_count"]
+        )
         if fail_count:
             self.write_failed(df, df_valid, column, check_type, kwargs["failure_path"])
-        return self._prepare_result(df_valid, fail_count, fail_pct, kwargs["error_threshold"])
+        return self._prepare_result(
+            df_valid, fail_count, fail_pct, kwargs["error_threshold"]
+        )
 
-    def log_result(self, resp, dqm:DqmMaster.ctlDqmMasterDtl, log:Logs.logDqmDtl, batch_id, start_time):
+    def log_result(
+        self,
+        resp,
+        dqm: DqmMaster.ctlDqmMasterDtl,
+        log: Logs.logDqmDtl,
+        batch_id,
+        start_time,
+    ):
         with OrchestrationProcess.OrchestrationProcess() as orch:
-            status = "SUCCEEDED" if resp["success"] else ("FAILED" if dqm.criticality == "C" else "SUCCEEDED")
+            status = (
+                "SUCCEEDED"
+                if resp["success"]
+                else ("FAILED" if dqm.criticality == "C" else "SUCCEEDED")
+            )
             orch.insert_log_dqm(
                 log_dqm=Logs.logDqmDtl(
-                process_id=self.process_id,
-                dataset_id=self.dataset_id,
-                batch_id=batch_id,
-                source_file=log.source_file,
-                column_name=dqm.column_name,
-                qc_type=dqm.qc_type,
-                qc_param=dqm.qc_param,
-                qc_filter=dqm.qc_filter,
-                criticality=dqm.criticality,
-                criticality_threshold_pct=dqm.criticality_threshold_pct,
-                error_count=resp["error_count"],
-                error_pct=resp["error_percentage"],
-                status=status,
-                dqm_start_time=start_time,
-                dqm_end_time=datetime.now(),
+                    process_id=self.process_id,
+                    dataset_id=self.dataset_id,
+                    batch_id=batch_id,
+                    source_file=log.source_file,
+                    column_name=dqm.column_name,
+                    qc_type=dqm.qc_type,
+                    qc_param=dqm.qc_param,
+                    qc_filter=dqm.qc_filter,
+                    criticality=dqm.criticality,
+                    criticality_threshold_pct=dqm.criticality_threshold_pct,
+                    error_count=resp["error_count"],
+                    error_pct=resp["error_percentage"],
+                    status=status,
+                    dqm_start_time=start_time,
+                    dqm_end_time=datetime.now(),
                 )
             )
 
@@ -178,7 +223,7 @@ class DataQualityCheckTransformation:
             start_time = datetime.now()
             batch_id = log.batch_id
             df = self.spark.read.format("delta").load(self.transformation_location)
-            
+
             original_df = df
 
             for dqm in self.dqm_masters:
@@ -186,23 +231,43 @@ class DataQualityCheckTransformation:
                 if not func:
                     continue
                 total = df.count()
-                resp = func(df, column_name=dqm.column_name, total_count=total, error_threshold=dqm.criticality_threshold_pct,
-                            qc_param=dqm.qc_param, qc_filter=dqm.qc_filter, qc_id=dqm.qc_id, dataset_id=self.dataset_id,
-                            failure_path=self.dqm_error_location, batch_id=batch_id)
+                resp = func(
+                    df,
+                    column_name=dqm.column_name,
+                    total_count=total,
+                    error_threshold=dqm.criticality_threshold_pct,
+                    qc_param=dqm.qc_param,
+                    qc_filter=dqm.qc_filter,
+                    qc_id=dqm.qc_id,
+                    dataset_id=self.dataset_id,
+                    failure_path=self.dqm_error_location,
+                    batch_id=batch_id,
+                )
                 self.log_result(resp, dqm, log, batch_id, start_time)
                 if not resp["success"] and dqm.criticality == "C":
-                    raise Exception(f"Critical DQM check failed for {dqm.column_name} [{dqm.qc_type}]")
+                    raise Exception(
+                        f"Critical DQM check failed for {dqm.column_name} [{dqm.qc_type}]"
+                    )
                 if resp["success"]:
                     df = resp["df"]
 
             self._write_data(df if dqm.criticality == "C" else original_df, batch_id)
 
-    def _write_data(self, df:DataFrame, batch_id):
-        df = SchemaCaster.SchemaCaster(df=df, schema_config=self.column_metadata).perform_casting()
+    def _write_data(self, df: DataFrame, batch_id):
+        df = SchemaCaster.SchemaCaster(
+            df=df, schema_config=self.column_metadata
+        ).perform_casting()
 
         df = df.withColumn("batch_id", lit(batch_id)).filter(col("sys_del_flg") == "N")
-        
-        df.write.format("delta").mode("overwrite").partitionBy(*[c.strip() for c in self.publish_partition_columns.split(",")]).save(self.publish_location)
+
+        if self.table_location_type.lower() == "external":
+            df.write.format("delta").mode("overwrite").partitionBy(
+                *[c.strip() for c in self.publish_partition_columns.split(",")]
+            ).save(self.publish_location)
+        else:
+            df.write.format("delta").mode("overwrite").partitionBy(
+                *[c.strip() for c in self.publish_partition_columns.split(",")]
+            ).saveAsTable(self.publish_table_name)
 
     def handle_no_dqm_masters(self):
         if not self.dqm_unprocessed_files:
@@ -211,17 +276,19 @@ class DataQualityCheckTransformation:
             start_time = datetime.now()
             batch_id = log.batch_id
             df = self.spark.read.format("delta").load(self.transformation_location)
-            df = SchemaCaster.SchemaCaster(df=df, schema_config=self.column_metadata).perform_casting()
+            df = SchemaCaster.SchemaCaster(
+                df=df, schema_config=self.column_metadata
+            ).perform_casting()
             self._write_data(df, batch_id)
             with OrchestrationProcess.OrchestrationProcess() as orch:
                 orch.insert_log_dqm(
                     log_dqm=Logs.logDqmDtl(
-                    process_id=self.process_id,
-                    dataset_id=self.dataset_id,
-                    batch_id=batch_id,
-                    source_file=log.source_file,
-                    status="SUCCEEDED",
-                    dqm_start_time=start_time,
-                    dqm_end_time=datetime.now(),
+                        process_id=self.process_id,
+                        dataset_id=self.dataset_id,
+                        batch_id=batch_id,
+                        source_file=log.source_file,
+                        status="SUCCEEDED",
+                        dqm_start_time=start_time,
+                        dqm_end_time=datetime.now(),
                     )
                 )
