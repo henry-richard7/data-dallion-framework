@@ -47,7 +47,8 @@ class SilverLayerProcess:
             data_standardisation_location=dataset_master.data_standardisation_location,
             data_standardisation_partition_columns=dataset_master.data_standardisation_partition_columns,
             table_location_type=dataset_master.table_location_type,
-            # env=env,
+            env=self.env,
+            landing_table_name=dataset_master.landing_table,
         )
         DataStandardization_end_time = round(
             (time() - DataStandardization_start_time) / 60, 2
