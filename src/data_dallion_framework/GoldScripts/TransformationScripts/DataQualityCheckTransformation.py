@@ -223,7 +223,11 @@ class DataQualityCheckTransformation:
         for log in self.dqm_unprocessed_files:
             start_time = datetime.now()
             batch_id = log.batch_id
-            df = self.spark.read.format("delta").load(self.transformation_location)
+
+            if self.table_location_type.lower() == "external":
+                df = self.spark.read.format("delta").load(self.transformation_location)
+            else:
+                df = self.spark.table(self.publish_table_name)
 
             original_df = df
 
@@ -276,7 +280,12 @@ class DataQualityCheckTransformation:
         for log in self.dqm_unprocessed_files:
             start_time = datetime.now()
             batch_id = log.batch_id
-            df = self.spark.read.format("delta").load(self.transformation_location)
+
+            if self.table_location_type.lower() == "external":
+                df = self.spark.read.format("delta").load(self.transformation_location)
+            else:
+                df = self.spark.table(self.publish_table_name)
+
             df = SchemaCaster.SchemaCaster(
                 df=df, schema_config=self.column_metadata
             ).perform_casting()
