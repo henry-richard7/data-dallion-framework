@@ -132,6 +132,9 @@ class PerformTransformation:
                                 "source_table_location"
                             ],
                             table_name=source_details[0]["source_table_name"],
+                            full_source_table_name=source_details[0][
+                                "full_source_table_name"
+                            ],
                         )
 
                         for source_detail in source_details[1:]:
@@ -141,6 +144,9 @@ class PerformTransformation:
                                         "source_table_location"
                                     ],
                                     table_name=source_detail["source_table_name"],
+                                    full_source_table_name=source_detail[
+                                        "full_source_table_name"
+                                    ],
                                 )
                                 df = df.union(df_)
 
@@ -330,7 +336,7 @@ class PerformTransformation:
                                 status="FAILED",
                                 transformation_start_time=start_time,
                                 transformation_end_time=datetime.now(),
-                                exception_details=e,
+                                exception_details=str(e),
                             )
                         )
                         raise
@@ -382,7 +388,7 @@ class PerformTransformation:
                 .load(source_table_location)
                 .filter(f"batch_id = {max_batch_id}")
             )
-            window_spec = Window.partitionBy()
+
         else:
             max_batch_id = (
                 self.spark.table(f"{self.env}.{full_source_table_name}")
@@ -393,12 +399,4 @@ class PerformTransformation:
                 f"{self.env}.{full_source_table_name}"
             ).filter(f"batch_id = {max_batch_id}")
 
-        return (
-            staging_df.withColumn(
-                "max_batch_id", spark_max("batch_id").over(window_spec)
-            )
-            .where(col("batch_id") == col("max_batch_id"))
-            .drop("max_batch_id")
-            .drop("batch_id")
-            .alias(table_name)
-        )
+        return staging_df

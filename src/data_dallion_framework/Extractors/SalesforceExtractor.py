@@ -144,7 +144,7 @@ class SalesforceExtractor:
                         inbound_file_location=file_save_name,
                         pre_ingestion_dataset_id=pre_ingestion_dataset_id,
                         status="FAILED",
-                        exception_details=e,
+                        exception_details=str(e),
                         start_time=start_time,
                         end_time=datetime.now(),
                     )
