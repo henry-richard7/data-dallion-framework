@@ -34,6 +34,7 @@ class DataQualityCheckTransformation:
         self.publish_partition_columns = publish_partition_columns
         self.publish_table_name = publish_table_name
         self.table_location_type = table_location_type
+        self.env = env
 
         with OrchestrationProcess.OrchestrationProcess() as orch:
             self.dqm_unprocessed_files = orch.get_transformation_dqm_unprocessed_files(
@@ -263,11 +264,11 @@ class DataQualityCheckTransformation:
         if self.table_location_type.lower() == "external":
             df.write.format("delta").mode("overwrite").partitionBy(
                 *[c.strip() for c in self.publish_partition_columns.split(",")]
-            ).save(self.publish_location)
+            ).save(f"{self.env}.{self.publish_location}")
         else:
             df.write.format("delta").mode("overwrite").partitionBy(
                 *[c.strip() for c in self.publish_partition_columns.split(",")]
-            ).saveAsTable(self.publish_table_name)
+            ).saveAsTable(f"{self.env}{self.publish_table_name}")
 
     def handle_no_dqm_masters(self):
         if not self.dqm_unprocessed_files:

@@ -28,34 +28,6 @@ from data_dallion_framework.Common import OrchestrationProcess
 
 
 class PerformTransformation:
-    def _get_unique_columns(self, source_details):
-        seen = set()
-        columns_to_select = []
-        for join_info in source_details:
-
-            for column in join_info["columns"]:
-                if join_info["transformation_type"] != "AGGREGATE":
-                    if column not in seen:
-                        seen.add(column)
-                        columns_to_select.append(
-                            f"{join_info['source_table_name']}.{column}"
-                        )
-        return columns_to_select
-
-    def _read_and_filter_latest_batch(self, source_table_location, table_name):
-        staging_df = self.spark.read.format("delta").load(source_table_location)
-        window_spec = Window.partitionBy()
-
-        return (
-            staging_df.withColumn(
-                "max_batch_id", spark_max("batch_id").over(window_spec)
-            )
-            .where(col("batch_id") == col("max_batch_id"))
-            .drop("max_batch_id")
-            .drop("batch_id")
-            .alias(table_name)
-        )
-
     def __init__(
         self,
         spark: SparkSession,
@@ -66,6 +38,7 @@ class PerformTransformation:
         env: str = "dev",
     ):
         self.spark = spark
+
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             transformation_depedencies = (
                 orch_process.get_transformation_dependency_master(
@@ -373,3 +346,31 @@ class PerformTransformation:
                 raise Exception(
                     f"Transformation is already completed for dataset id: {dataset_id}."
                 )
+
+    def _get_unique_columns(self, source_details):
+        seen = set()
+        columns_to_select = []
+        for join_info in source_details:
+
+            for column in join_info["columns"]:
+                if join_info["transformation_type"] != "AGGREGATE":
+                    if column not in seen:
+                        seen.add(column)
+                        columns_to_select.append(
+                            f"{join_info['source_table_name']}.{column}"
+                        )
+        return columns_to_select
+
+    def _read_and_filter_latest_batch(self, source_table_location, table_name):
+        staging_df = self.spark.read.format("delta").load(source_table_location)
+        window_spec = Window.partitionBy()
+
+        return (
+            staging_df.withColumn(
+                "max_batch_id", spark_max("batch_id").over(window_spec)
+            )
+            .where(col("batch_id") == col("max_batch_id"))
+            .drop("max_batch_id")
+            .drop("batch_id")
+            .alias(table_name)
+        )

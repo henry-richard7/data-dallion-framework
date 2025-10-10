@@ -11,8 +11,31 @@ from pyspark.sql import SparkSession
 
 
 class SilverLayerProcess:
+    def __init__(self, spark: SparkSession, process_id, env="dev"):
+        self.spark: SparkSession = spark
+        self.env = env
+
+        with OrchestrationProcess.OrchestrationProcess() as orch_process:
+            self.silver_datasets = orch_process.get_dataset_master(
+                process_id=process_id, dataset_type="BRONZE"
+            )
+
+        with ThreadPoolExecutor(
+            max_workers=min(5, len(self.silver_datasets))
+        ) as executor:
+            futures = [
+                executor.submit(self._handle_silver_layer_process, silver_dataset)
+                for silver_dataset in self.silver_datasets
+            ]
+
+            for future in futures:
+                try:
+                    future.result()  # Wait for each thread to finish
+                except Exception as e:
+                    raise
+
     def _handle_silver_layer_process(
-        self, dataset_master: DatasetMaster.ctlDatasetMaster, env="dev"
+        self, dataset_master: DatasetMaster.ctlDatasetMaster
     ):
 
         DataStandardization_start_time = time()
@@ -44,7 +67,7 @@ class SilverLayerProcess:
             publish_partition_columns=dataset_master.publish_partition_columns,
             publish_table_name=dataset_master.publish_table,
             table_location_type=dataset_master.table_location_type,
-            env=env,
+            env=self.env,
         )
         DataQualityCheck_end_time = round(
             (time() - DataQualityCheck_start_time) / 3600, 6
@@ -70,24 +93,3 @@ class SilverLayerProcess:
         #     dataset_id=dataset_master.dataset_id,
         # ).execute_ddl(dataset_type="L1")
         # PublishDDLL_end_time = round((time() - PublishDDL_start_time) / 3600, 6)
-
-    def __init__(self, spark: SparkSession, process_id):
-        self.spark: SparkSession = spark
-        with OrchestrationProcess.OrchestrationProcess() as orch_process:
-            self.silver_datasets = orch_process.get_dataset_master(
-                process_id=process_id, dataset_type="BRONZE"
-            )
-
-        with ThreadPoolExecutor(
-            max_workers=min(5, len(self.silver_datasets))
-        ) as executor:
-            futures = [
-                executor.submit(self._handle_silver_layer_process, silver_dataset)
-                for silver_dataset in self.silver_datasets
-            ]
-
-            for future in futures:
-                try:
-                    future.result()  # Wait for each thread to finish
-                except Exception as e:
-                    raise
