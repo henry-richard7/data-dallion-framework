@@ -38,6 +38,8 @@ class PerformTransformation:
         env: str = "dev",
     ):
         self.spark = spark
+        self.table_location_type = table_location_type
+        self.env = env
 
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             transformation_depedencies = (
@@ -104,6 +106,7 @@ class PerformTransformation:
                         )[
                             -1
                         ],
+                        "full_source_table_name": dependent_dataset_details.staging_table,
                         "transformation_type": transformation_depedency.transformation_type,
                         "join_how": transformation_depedency.join_how,
                         "left_table_columns": transformation_depedency.left_table_columns,
@@ -147,6 +150,9 @@ class PerformTransformation:
                                         "source_table_location"
                                     ],
                                     table_name=source_detail["source_table_name"],
+                                    full_source_table_name=source_detail[
+                                        "full_source_table_name"
+                                    ],
                                 )
 
                                 left_cols = source_detail["left_table_columns"].split(
@@ -361,9 +367,31 @@ class PerformTransformation:
                         )
         return columns_to_select
 
-    def _read_and_filter_latest_batch(self, source_table_location, table_name):
-        staging_df = self.spark.read.format("delta").load(source_table_location)
-        window_spec = Window.partitionBy()
+    def _read_and_filter_latest_batch(
+        self, source_table_location, table_name, full_source_table_name
+    ):
+        if self.table_location_type.lower() == "external":
+            max_batch_id = (
+                self.spark.read.format("delta")
+                .load(source_table_location)
+                .select(spark_max("batch_id"))
+                .collect()[0][0]
+            )
+            staging_df = (
+                self.spark.read.format("delta")
+                .load(source_table_location)
+                .filter(f"batch_id = {max_batch_id}")
+            )
+            window_spec = Window.partitionBy()
+        else:
+            max_batch_id = (
+                self.spark.table(f"{self.env}.{full_source_table_name}")
+                .select(spark_max("batch_id"))
+                .collect()[0][0]
+            )
+            staging_df = self.spark.table(
+                f"{self.env}.{full_source_table_name}"
+            ).filter(f"batch_id = {max_batch_id}")
 
         return (
             staging_df.withColumn(
