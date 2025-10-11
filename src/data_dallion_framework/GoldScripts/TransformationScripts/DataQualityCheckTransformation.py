@@ -17,6 +17,7 @@ class DataQualityCheckTransformation:
         spark: SparkSession,
         process_id,
         dataset_id,
+        transformation_table_name,
         transformation_location,
         dqm_error_location,
         publish_location,
@@ -29,6 +30,7 @@ class DataQualityCheckTransformation:
         self.process_id = process_id
         self.dataset_id = dataset_id
         self.transformation_location = transformation_location
+        self.transformation_table_name = transformation_table_name
         self.dqm_error_location = dqm_error_location
         self.publish_location = publish_location
         self.publish_partition_columns = publish_partition_columns
@@ -227,7 +229,7 @@ class DataQualityCheckTransformation:
             if self.table_location_type.lower() == "external":
                 df = self.spark.read.format("delta").load(self.transformation_location)
             else:
-                df = self.spark.table(self.publish_table_name)
+                df = self.spark.table(f"{self.env}.{self.transformation_table_name}")
 
             original_df = df
 
@@ -268,11 +270,11 @@ class DataQualityCheckTransformation:
         if self.table_location_type.lower() == "external":
             df.write.format("delta").mode("overwrite").partitionBy(
                 *[c.strip() for c in self.publish_partition_columns.split(",")]
-            ).save(f"{self.env}.{self.publish_location}")
+            ).save(f"{self.publish_location}")
         else:
             df.write.format("delta").mode("overwrite").partitionBy(
                 *[c.strip() for c in self.publish_partition_columns.split(",")]
-            ).saveAsTable(f"{self.env}{self.publish_table_name}")
+            ).saveAsTable(f"{self.env}.{self.publish_table_name}")
 
     def handle_no_dqm_masters(self):
         if not self.dqm_unprocessed_files:
@@ -284,7 +286,7 @@ class DataQualityCheckTransformation:
             if self.table_location_type.lower() == "external":
                 df = self.spark.read.format("delta").load(self.transformation_location)
             else:
-                df = self.spark.table(self.publish_table_name)
+                df = self.spark.table(f"{self.env}.{self.transformation_table_name}")
 
             df = SchemaCaster.SchemaCaster(
                 df=df, schema_config=self.column_metadata
