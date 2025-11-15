@@ -1,9 +1,11 @@
+from pathlib import Path
+from json import loads
+
 from pydantic import computed_field, model_validator, Field
 from pydantic_settings import BaseSettings
 from typing import Literal
 from sqlmodel import SQLModel, create_engine, Session, select
 from typing import Optional, Union
-from pathlib import Path
 
 from data_dallion_framework.Common.Models.Acquisition import (
     ctlApiConnectionsDtl,
@@ -21,9 +23,13 @@ from data_dallion_framework.Common.Models.Logs import (
 
 from data_dallion_framework.Common.Models.ColumnMetadata import CtlColumnMetadata
 from data_dallion_framework.Common.Models.DatasetMaster import ctlDatasetMaster
-from data_dallion_framework.Common.Models.DataStandardisation import ctlDataStandardisationDtl
+from data_dallion_framework.Common.Models.DataStandardisation import (
+    ctlDataStandardisationDtl,
+)
 from data_dallion_framework.Common.Models.DqmMaster import ctlDqmMasterDtl
-from data_dallion_framework.Common.Models.TransformationDependencyMaster import ctlTransformationDependencyMaster
+from data_dallion_framework.Common.Models.TransformationDependencyMaster import (
+    ctlTransformationDependencyMaster,
+)
 
 
 class BackendSettings(BaseSettings):
@@ -55,12 +61,13 @@ class BackendSettings(BaseSettings):
     sqlalchemy_url: Optional[str] = Field(default=None, alias="database_url")
 
     # Database type
-    database_type: Literal["mysql", "postgresql", "sqlite","mariadb"] = Field(
+    database_type: Literal["mysql", "postgresql", "sqlite", "mariadb"] = Field(
         default="sqlite", alias="db_type"
     )
 
     # Common database fields
     database: str = Field(default="nextgen_framework_configuration", alias="db_name")
+    connect_args: Optional[str] = Field(default=None, alias="db_connect_args")
     user: Optional[str] = Field(default=None, alias="db_user")
     password: Optional[str] = Field(default=None, alias="db_password")
     hostname: Optional[str] = Field(default="localhost", alias="db_host")
@@ -137,7 +144,14 @@ class OrchestrationProcess:
             session (Session): SQLAlchemy session object for interacting with the database.
         """
         self.orch_settings = BackendSettings()
-        self.connection = create_engine(self.orch_settings.connection_string)
+        self.connection = create_engine(
+            self.orch_settings.connection_string,
+            connect_args=(
+                loads(self.orch_settings.connect_args)
+                if self.orch_settings.connect_args
+                else {}
+            ),
+        )
         SQLModel.metadata.create_all(bind=self.connection)
 
         self.session = Session(self.connection)
