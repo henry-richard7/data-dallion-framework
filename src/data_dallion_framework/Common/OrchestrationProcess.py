@@ -45,6 +45,7 @@ class BackendSettings(BaseSettings):
             If provided, this takes precedence over other fields.
         database_type (Literal["mysql", "postgresql", "sqlite"]): Type of database to use.
             Defaults to "sqlite".
+        connect_args (Optional[str]): JSON string of additional connection arguments.
         database (str): Name of the database/schema.
         user (Optional[str]): Database user.
         password (Optional[str]): Database password.
