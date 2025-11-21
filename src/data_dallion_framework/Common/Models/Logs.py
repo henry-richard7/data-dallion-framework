@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text, BigInteger, String
+from sqlalchemy import Column, Text, BigInteger, String, Identity, Integer
 from typing import Optional
 from datetime import date, datetime
 
@@ -9,8 +9,9 @@ class logDataAcquisitionDetail(SQLModel, table=True):
     Logs execution details of data acquisition processes including status, timing, and exception information.
     """
 
-    seq_no: int = Field(
-        primary_key=True, description="Auto-incremented sequence number."
+    seq_no: Optional[int] = Field(
+        description="Auto-incremented sequence number.",
+        sa_column=Column(Integer, Identity(start=1, always=True), primary_key=True),
     )
     batch_id: Optional[int] = Field(
         default=None,
@@ -58,7 +59,8 @@ class logRawProcessDtl(SQLModel, table=True):
     """
 
     file_id: Optional[int] = Field(
-        primary_key=True, description="Unique identifier for the processed file."
+        description="Unique identifier for the processed file.",
+        sa_column=Column(Integer, Identity(start=1, always=True), primary_key=True),
     )
     run_date: Optional[date] = Field(
         default_factory=date.today, description="Date when the file was processed."
@@ -109,9 +111,13 @@ class logDataStandardisationDtl(SQLModel, table=True):
     """
 
     seq_no: Optional[int] = Field(
-        primary_key=True,
         default=None,
         description="Auto-incremented sequence number for logging entries.",
+        sa_column=Column(
+            Integer,
+            Identity(start=1, always=True),
+            primary_key=True,
+        ),
     )
     batch_id: Optional[int] = Field(
         default=None,
@@ -159,9 +165,13 @@ class logDqmDtl(SQLModel, table=True):
     """
 
     seq_no: Optional[int] = Field(
-        primary_key=True,
         default=None,
         description="Auto-incremented sequence number for logging entries.",
+        sa_column=Column(
+            Integer,
+            Identity(start=1, always=True),
+            primary_key=True,
+        ),
     )
     process_id: Optional[int] = Field(
         default=None, description="ID of the data pipeline process involved."
@@ -233,9 +243,13 @@ class logTransformationDtl(SQLModel, table=True):
     """
 
     seq_no: Optional[int] = Field(
-        primary_key=True,
         default=None,
         description="Auto-incremented sequence number for logging entries.",
+        sa_column=Column(
+            Integer,
+            Identity(start=1, always=True),
+            primary_key=True,
+        ),
     )
     batch_id: Optional[int] = Field(
         default=None,
