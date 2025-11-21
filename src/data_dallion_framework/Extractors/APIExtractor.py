@@ -227,11 +227,13 @@ class APIAutomation:
             ["params", "data", "json_body"],
         )
 
-        # Replace $current_date in data and json_body
+        # Replace $current_date in data, json_body and params
         if "$current_date" in str(data):
             data = self.date_parse_changer(data)
         if "$current_date" in str(json_body):
             json_body = self.date_parse_changer(json_body)
+        if "$current_date" in str(params):
+            params = self.date_parse_changer(params)
 
         if not step.get("body_values"):
             return self.execute_request(method, url, headers, params, data, json_body)
