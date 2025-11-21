@@ -13,3 +13,6 @@ wheels/
 tests/compute/*
 tests/inbound/*
 tests/publish/*
+
+# environments
+.env

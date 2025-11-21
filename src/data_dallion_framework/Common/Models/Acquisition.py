@@ -10,14 +10,18 @@ class ctlDataAcquisitionConnectionMaster(SQLModel, table=True):
     """
 
     outbound_source_platform: str = Field(
-        primary_key=True,
         description="The platform in which the source file is stored.",
-        sa_column=Column(String(4000)),
+        sa_column=Column(
+            String(4000),
+            primary_key=True,
+        ),
     )
     credentials_identifier: str = Field(
-        primary_key=True,
         description="The unique identifier for the source credentials.",
-        sa_column=Column(String(4000)),
+        sa_column=Column(
+            String(4000),
+            primary_key=True,
+        ),
     )
     connection_config: Optional[str] = Field(
         default=None,
