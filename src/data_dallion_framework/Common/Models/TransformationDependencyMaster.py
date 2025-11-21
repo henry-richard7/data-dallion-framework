@@ -1,26 +1,30 @@
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, Integer
 from typing import Optional
-    
+
+
 class ctlTransformationDependencyMaster(SQLModel, table=True):
     """Stores transformation dependencies between datasets.
     Defines join logic, primary keys, and custom queries used during transformations.
     """
 
     process_id: int = Field(
-        primary_key=True, description="ID of the transformation process.",index=True
+        primary_key=True, description="ID of the transformation process.", index=True
     )
     dataset_id: int = Field(
-        primary_key=True, description="ID of the current dataset being transformed." ,index=True
-    )
-    dependent_dataset_id  : int = Field(
         primary_key=True,
-        description="ID of the dependent dataset needed for transformation.", index=True
+        description="ID of the current dataset being transformed.",
+        index=True,
+    )
+    dependent_dataset_id: int = Field(
+        primary_key=True,
+        description="ID of the dependent dataset needed for transformation.",
+        index=True,
     )
     transformation_sequence: int = Field(
         default=None,
         description="Order of transformation step sequence.",
-        sa_column=Column(Text),
+        sa_column=Column(Integer),
     )
     transformation_type: Optional[str] = Field(
         default=None,
@@ -47,12 +51,12 @@ class ctlTransformationDependencyMaster(SQLModel, table=True):
         description="List of primary keys for the resulting transformed dataset.",
         sa_column=Column(Text),
     )
-    group_by_columns:Optional[str] = Field(
+    group_by_columns: Optional[str] = Field(
         default=None,
         description="List of group by for the resulting transformed dataset.",
         sa_column=Column(Text),
     )
-    measure_columns:Optional[str] = Field(
+    measure_columns: Optional[str] = Field(
         default=None,
         description="List of group by for the resulting transformed dataset.",
         sa_column=Column(Text),
@@ -77,4 +81,3 @@ class ctlTransformationDependencyMaster(SQLModel, table=True):
         description="Custom Transformation Script Path.",
         sa_column=Column(Text),
     )
-    

@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel, Field
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, String
 from typing import Optional
+
 
 class ctlDataAcquisitionConnectionMaster(SQLModel, table=True):
     """
@@ -9,14 +10,14 @@ class ctlDataAcquisitionConnectionMaster(SQLModel, table=True):
     """
 
     outbound_source_platform: str = Field(
-        primary_key=True, 
+        primary_key=True,
         description="The platform in which the source file is stored.",
-        max_length=255,
+        sa_column=Column(String(4000)),
     )
     credentials_identifier: str = Field(
         primary_key=True,
         description="The unique identifier for the source credentials.",
-        max_length=255
+        sa_column=Column(String(4000)),
     )
     connection_config: Optional[str] = Field(
         default=None,
@@ -55,7 +56,7 @@ class ctlApiConnectionsDtl(SQLModel, table=True):
     token_url: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="URL to fetch a token if type == 'TOKEN'."
+        description="URL to fetch a token if type == 'TOKEN'.",
     )
     auth_type: Optional[str] = Field(
         default=None,
@@ -65,82 +66,89 @@ class ctlApiConnectionsDtl(SQLModel, table=True):
     token_type: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Type of token used (e.g., Bearer)."
+        description="Type of token used (e.g., Bearer).",
     )
     client_id: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Client ID used to request a token."
+        description="Client ID used to request a token.",
     )
     client_secret: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Client secret used to request a token."
+        description="Client secret used to request a token.",
     )
     username: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Username used for basic authentication."
+        description="Username used for basic authentication.",
     )
     password: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Password used for basic authentication."
+        description="Password used for basic authentication.",
     )
     issuer: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Issuer required for JWT or service account token requests."
+        description="Issuer required for JWT or service account token requests.",
     )
     scope: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Scope required for JWT or service account token requests."
+        description="Scope required for JWT or service account token requests.",
     )
     private_key: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Private key required for JWT or service account token requests."
+        description="Private key required for JWT or service account token requests.",
     )
     token_path: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="JSON path where the token exists in the response body."
+        description="JSON path where the token exists in the response body.",
     )
     method: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="HTTP method used for the API request (e.g., GET, POST)."
+        description="HTTP method used for the API request (e.g., GET, POST).",
     )
     url: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="API endpoint URL to send the request to."
+        description="API endpoint URL to send the request to.",
     )
     headers: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="HTTP headers to be sent with the request as JSON string."
+        description="HTTP headers to be sent with the request as JSON string.",
     )
     params: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Query parameters to be appended to the request URL."
+        description="Query parameters to be appended to the request URL.",
     )
     data: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Raw body content sent when making an API request."
+        description="Raw body content sent when making an API request.",
     )
     json_body: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="JSON-formatted body sent when making an API request."
+        description="JSON-formatted body sent when making an API request.",
     )
-    body_values: Optional[str] = Field(
-        default=None,
+    body_values: Optional[str] = (
+        Field(
+            default=None,
+            sa_column=Column(Text),
+            description="Placeholders in the request body that need dynamic replacement.",
+        ),
+    )
+    ssl_verify: Optional[str] = Field(
+        default="Y",
         sa_column=Column(Text),
-        description="Placeholders in the request body that need dynamic replacement."
+        description="Flag indicating whether to verify SSL certificates.",
     )
 
 
@@ -160,55 +168,55 @@ class ctlDataAcquisitionDetail(SQLModel, table=True):
     pre_ingestion_dataset_name: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="The Bronze Layer dataset name."
+        description="The Bronze Layer dataset name.",
     )
     outbound_source_platform: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Platform where the source file is stored (e.g., SFTP, DB, Salesforce)."
+        description="Platform where the source file is stored (e.g., SFTP, DB, Salesforce).",
     )
     credentials_identifier: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Unique identifier for the source system credentials."
+        description="Unique identifier for the source system credentials.",
     )
     outbound_source_location: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Location where the source file is stored (e.g., directory path or database schema)."
+        description="Location where the source file is stored (e.g., directory path or database schema).",
     )
     outbound_source_file_pattern_static: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Flag indicating whether the source filename is static ('Y' or 'N')."
+        description="Flag indicating whether the source filename is static ('Y' or 'N').",
     )
     outbound_source_file_pattern: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="File name pattern of the source file. Supports YYYY-MM-DD and regex patterns."
+        description="File name pattern of the source file. Supports YYYY-MM-DD and regex patterns.",
     )
     outbound_source_file_format: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Format of the source file (e.g., CSV, JSON, XML)."
+        description="Format of the source file (e.g., CSV, JSON, XML).",
     )
     outbound_file_delimiter: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Delimiter used in the source file (e.g., comma, tab)."
+        description="Delimiter used in the source file (e.g., comma, tab).",
     )
     query: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="SQL query to fetch data from a database. Use only when source platform is a database."
+        description="SQL query to fetch data from a database. Use only when source platform is a database.",
     )
     columns: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Comma-separated list of columns to select from Salesforce. Use only when source platform is Salesforce."
+        description="Comma-separated list of columns to select from Salesforce. Use only when source platform is Salesforce.",
     )
     inbound_location: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Destination location where the acquired data will be saved."
+        description="Destination location where the acquired data will be saved.",
     )

@@ -177,6 +177,7 @@ class APIAutomation:
         params: dict,
         data: dict,
         json_body: dict,
+        ssl_verify: bool = True,
     ) -> Union[dict, List[dict]]:
         """
         Execute an API request and return the processed response.
@@ -200,7 +201,7 @@ class APIAutomation:
             params=params if params else None,
             data=data if data else None,
             json=json_body if json_body else None,
-            verify=False,
+            verify=ssl_verify,
         )
         response.raise_for_status()
         return response.json()
@@ -220,6 +221,7 @@ class APIAutomation:
 
         url, method = step["url"], step.get("method", "GET").upper()
         headers = {**self.headers, **step.get("headers", {})}
+        ssl_verify = step.get("ssl_verify", True)
         params, data, json_body = map(
             lambda k: {**getattr(self, k), **step.get(k, {})},
             ["params", "data", "json_body"],
@@ -271,7 +273,7 @@ class APIAutomation:
                     params=params if params else None,
                     data=to_perform_request if data else None,
                     json=to_perform_request if json_body else None,
-                    verify=False,
+                    verify=ssl_verify,
                 )
                 responses.append(response_)
 
@@ -344,6 +346,9 @@ class APIExtractor:
                 temp_dict = dict()
                 temp_dict["method"] = api_connection_dtl.method
                 temp_dict["type"] = api_connection_dtl.type
+                temp_dict["ssl_verify"] = (
+                    True if api_connection_dtl.ssl_verify == "Y" else False
+                )
 
                 if api_connection_dtl.type == "TOKEN":
                     temp_dict["token_url"] = api_connection_dtl.token_url
