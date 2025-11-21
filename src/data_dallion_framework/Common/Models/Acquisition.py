@@ -142,12 +142,10 @@ class ctlApiConnectionsDtl(SQLModel, table=True):
         sa_column=Column(Text),
         description="JSON-formatted body sent when making an API request.",
     )
-    body_values: Optional[str] = (
-        Field(
-            default=None,
-            sa_column=Column(Text),
-            description="Placeholders in the request body that need dynamic replacement.",
-        ),
+    body_values: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text),
+        description="Placeholders in the request body that need dynamic replacement.",
     )
     ssl_verify: Optional[str] = Field(
         default="Y",
