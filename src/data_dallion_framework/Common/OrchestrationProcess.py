@@ -235,28 +235,41 @@ class OrchestrationProcess:
         self.session.commit()
 
     def get_ctl_data_acquisition_detail(
-        self, process_id: int
-    ) -> list[ctlDataAcquisitionDetail]:
+        self,
+        process_id: int,
+        pre_ingestion_dataset_id: Optional[int] = None,
+    ) -> Union[list[ctlDataAcquisitionDetail], ctlDataAcquisitionDetail]:
         """
-        Retrieve data acquisition details for a specific process from the database.
-
-        This method queries the database to retrieve all `ctlDataAcquisitionDetail` records associated with the provided `process_id`.
-
+        Retrieve data acquisition details based on process ID and optional pre-ingestion dataset ID.
         Args:
-            process_id (int): The unique identifier of the process for which to retrieve data acquisition details.
-
+            process_id (int): The unique identifier for the data acquisition process.
+            pre_ingestion_dataset_id (Optional[int], default=None): The pre-ingestion dataset ID
+                to filter the results. If provided, a single record is returned; otherwise,
+                all records for the process ID are returned.
         Returns:
-            list[ctlDataAcquisitionDetail]: A list of `ctlDataAcquisitionDetail` objects matching the given `process_id`. Returns an empty list if no records are found.
-
+            Union[list[ctlDataAcquisitionDetail], ctlDataAcquisitionDetail]: A list of
+                ctlDataAcquisitionDetail objects if no pre_ingestion_dataset_id is provided,
+                or a single ctlDataAcquisitionDetail object if pre_ingestion_dataset_id is specified.
         Raises:
             SQLAlchemyError: If a database error occurs during query execution.
         """
-        query = select(ctlDataAcquisitionDetail).where(
-            ctlDataAcquisitionDetail.process_id == process_id
-        )
 
-        result = self.session.exec(query).all()
-        return result
+        if pre_ingestion_dataset_id is None:
+            query = select(ctlDataAcquisitionDetail).where(
+                ctlDataAcquisitionDetail.process_id == process_id
+            )
+
+            result = self.session.exec(query).all()
+            return result
+        else:
+            query = select(ctlDataAcquisitionDetail).where(
+                ctlDataAcquisitionDetail.process_id == process_id,
+                ctlDataAcquisitionDetail.pre_ingestion_dataset_id
+                == pre_ingestion_dataset_id,
+            )
+
+            result = self.session.exec(query).first()
+            return result
 
     def insert_ctl_data_acquisition_connection_master(
         self, data_acquisition_connection_detail: ctlDataAcquisitionConnectionMaster
