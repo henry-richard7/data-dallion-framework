@@ -720,14 +720,20 @@ class OrchestrationProcess:
 
     def get_gold_datasets(self) -> list[ctlDatasetMaster]:
         """
-        Retrieve all GOLD-type datasets from the dataset master table.
-
-        This method queries the `ctlDatasetMaster` table to fetch records where the
-        `dataset_type` is "GOLD". The results are ordered by `dataset_id` in ascending order.
-
+        Retrieve all GOLD datasets from the control dataset master table.
+        This method queries the database for ctlDatasetMaster records whose
+        dataset_type is "GOLD" and returns them ordered by dataset_id.
         Returns:
-            (List[ctlDatasetMaster]): A list of dataset master records representing GOLD-type datasets.
+            list[ctlDatasetMaster]: A list of ctlDatasetMaster instances matching
+                dataset_type == "GOLD". Returns an empty list if no matching records
+                are found.
+        Raises:
+            Exception: Database-related exceptions raised by the session (for example,
+                SQLAlchemy errors) are propagated to the caller.
+        Example:
+            >>> gold_datasets = orchestration_process.get_gold_datasets()
         """
+
         query = (
             select(ctlDatasetMaster)
             .where(ctlDatasetMaster.dataset_type == "GOLD")
@@ -742,3 +748,4 @@ class OrchestrationProcess:
 
     def __exit__(self, exc_type, exc_value, exc_traceback) -> None:
         self.session.close()
+        self.connection.dispose()
