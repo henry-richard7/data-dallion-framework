@@ -114,6 +114,7 @@ class PerformTransformation:
                         "columns": dependent_columns,
                         "group_by_columns": transformation_depedency.group_by_columns,
                         "measure_columns": transformation_depedency.measure_columns,
+                        "extra_values": transformation_depedency.extra_values,
                     }
                 )
 

@@ -106,14 +106,11 @@ class DataStandardization:
         return transformations
 
     def write_and_log(
-        self, df, batch_id, start_datetime, source_file, status, exception_details=None
+        self, batch_id, start_datetime, source_file, status, exception_details=None
     ):
         """
         Writes DataFrame to Delta format and logs process details.
         """
-        df.write.format("delta").mode("append").partitionBy(
-            self.partition_columns
-        ).save(self.data_standardisation_location)
 
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             orch_process.insert_log_data_acquisition_detail(
@@ -154,7 +151,6 @@ class DataStandardization:
 
         if not unprocessed_files:
             self.write_and_log(
-                self.spark.createDataFrame([], schema=None),
                 None,
                 datetime.now(),
                 None,
@@ -177,8 +173,9 @@ class DataStandardization:
                 else:
                     df = self.spark.read.table(f"{self.env}.{self.landing_table_name}")
 
+                df = df.drop("batch_id")
                 # Rename columns all at once if counts match
-                if len(df.columns) == len(source_column_names):
+                if df.columns == source_column_names:
                     df = df.toDF(*target_column_names)
 
                     # Build transformations
@@ -192,6 +189,10 @@ class DataStandardization:
                     # Add batch_id column
                     df = df.withColumn("batch_id", lit(file.batch_id))
 
+                    df.write.format("delta").mode("append").partitionBy(
+                        self.partition_columns
+                    ).save(self.data_standardisation_location)
+
                     # Write output and log success
                     self.write_and_log(
                         df, file.batch_id, start_time, file.source_file, "SUCCEEDED"
@@ -204,9 +205,6 @@ class DataStandardization:
             except Exception as e:
                 # Write empty dataframe & log failure (schema-safe if df exists)
                 self.write_and_log(
-                    self.spark.createDataFrame(
-                        [], schema=df.schema if "df" in locals() else None
-                    ),
                     file.batch_id,
                     start_time,
                     file.source_file,
