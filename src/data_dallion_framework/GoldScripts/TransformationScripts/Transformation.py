@@ -13,6 +13,7 @@ from pyspark.sql import functions as F
 
 from pyspark.sql.window import Window
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.functions import expr
 
 from json import loads as json_loads
 from datetime import datetime
@@ -137,89 +138,102 @@ class PerformTransformation:
                                 "full_source_table_name"
                             ],
                         )
+                        df = df.drop("batch_id")
 
-                        for source_detail in source_details[1:]:
-                            if source_detail["transformation_type"] == "UNION":
-                                df_ = self._read_and_filter_latest_batch(
-                                    source_table_location=source_detail[
-                                        "source_table_location"
-                                    ],
-                                    table_name=source_detail["source_table_name"],
-                                    full_source_table_name=source_detail[
-                                        "full_source_table_name"
-                                    ],
+                        if source_details[0]["transformation_type"] == "SINGLE":
+                            if source_details[0]["extra_values"]:
+                                extra_values: dict = json_loads(
+                                    source_details[0]["extra_values"]
                                 )
-                                df = df.union(df_)
-
-                            elif source_detail["transformation_type"] == "JOIN":
-                                df_ = self._read_and_filter_latest_batch(
-                                    source_table_location=source_detail[
-                                        "source_table_location"
-                                    ],
-                                    table_name=source_detail["source_table_name"],
-                                    full_source_table_name=source_detail[
-                                        "full_source_table_name"
-                                    ],
-                                )
-
-                                left_cols = source_detail["left_table_columns"].split(
-                                    ","
-                                )
-                                right_cols = source_detail["right_table_columns"].split(
-                                    ","
-                                )
-
-                                join_conditions = [
-                                    df[l] == df_[r]
-                                    for l, r in zip(left_cols, right_cols)
-                                ]
-                                join_condition = (
-                                    reduce(operator.and_, join_conditions)
-                                    if len(join_conditions) > 1
-                                    else join_conditions[0]
-                                )
-
-                                df = df.join(
-                                    df_,
-                                    on=join_condition,
-                                    how=source_detail["join_how"].lower(),
-                                )
-
-                                if joining_tables[-1] == source_detail:
-                                    columns_to_select = self._get_unique_columns(
-                                        source_details
+                                for col_name, expression in extra_values.items():
+                                    df = df.withColumn(col_name, expr(expression))
+                        else:
+                            for source_detail in source_details[1:]:
+                                if source_detail["transformation_type"] == "UNION":
+                                    df_ = self._read_and_filter_latest_batch(
+                                        source_table_location=source_detail[
+                                            "source_table_location"
+                                        ],
+                                        table_name=source_detail["source_table_name"],
+                                        full_source_table_name=source_detail[
+                                            "full_source_table_name"
+                                        ],
                                     )
-                                    df = df.select(columns_to_select)
+                                    df = df.union(df_)
 
-                            elif source_detail["transformation_type"] == "AGGREGATE":
-                                if source_detail != source_details[-1]:
-                                    raise Exception(
-                                        "Aggregation must be performed after UNION or JOIN. Not before."
+                                elif source_detail["transformation_type"] == "JOIN":
+                                    df_ = self._read_and_filter_latest_batch(
+                                        source_table_location=source_detail[
+                                            "source_table_location"
+                                        ],
+                                        table_name=source_detail["source_table_name"],
+                                        full_source_table_name=source_detail[
+                                            "full_source_table_name"
+                                        ],
                                     )
 
-                                group_cols = source_detail["group_by_columns"].split(
-                                    ","
-                                )
-                                measures = json_loads(source_detail["measure_columns"])
+                                    left_cols = source_detail[
+                                        "left_table_columns"
+                                    ].split(",")
+                                    right_cols = source_detail[
+                                        "right_table_columns"
+                                    ].split(",")
 
-                                agg_exprs = []
+                                    join_conditions = [
+                                        df[l] == df_[r]
+                                        for l, r in zip(left_cols, right_cols)
+                                    ]
+                                    join_condition = (
+                                        reduce(operator.and_, join_conditions)
+                                        if len(join_conditions) > 1
+                                        else join_conditions[0]
+                                    )
 
-                                for col_, agg_func in measures.items():
-                                    func = getattr(F, agg_func.lower(), None)
-                                    if func is None:
-                                        raise ValueError(
-                                            f"Unsupported aggregation: {agg_func}"
+                                    df = df.join(
+                                        df_,
+                                        on=join_condition,
+                                        how=source_detail["join_how"].lower(),
+                                    )
+
+                                    if joining_tables[-1] == source_detail:
+                                        columns_to_select = self._get_unique_columns(
+                                            source_details
                                         )
-                                    agg_exprs.append(
-                                        func(F.col(col_)).alias(
-                                            f"{col_}_{agg_func.lower()}"
+                                        df = df.select(columns_to_select)
+
+                                elif (
+                                    source_detail["transformation_type"] == "AGGREGATE"
+                                ):
+                                    if source_detail != source_details[-1]:
+                                        raise Exception(
+                                            "Aggregation must be performed after UNION or JOIN. Not before."
                                         )
+
+                                    group_cols = source_detail[
+                                        "group_by_columns"
+                                    ].split(",")
+                                    measures = json_loads(
+                                        source_detail["measure_columns"]
                                     )
 
-                                df = df.groupBy(group_cols).agg(*agg_exprs)
+                                    agg_exprs = []
 
-                            elif source_detail["transformation_type"] == "CUSTOM":
-                                raise NotImplementedError()
+                                    for col_, agg_func in measures.items():
+                                        func = getattr(F, agg_func.lower(), None)
+                                        if func is None:
+                                            raise ValueError(
+                                                f"Unsupported aggregation: {agg_func}"
+                                            )
+                                        agg_exprs.append(
+                                            func(F.col(col_)).alias(
+                                                f"{col_}_{agg_func.lower()}"
+                                            )
+                                        )
+
+                                    df = df.groupBy(group_cols).agg(*agg_exprs)
+
+                                elif source_detail["transformation_type"] == "CUSTOM":
+                                    raise NotImplementedError()
 
                         final_result_df: DataFrame = df.select(
                             *target_table_column_names
