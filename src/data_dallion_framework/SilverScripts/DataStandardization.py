@@ -149,7 +149,8 @@ class DataStandardization:
                 dataset_id=self.dataset_id
             )
 
-        col_names = [x.source_column_name.lower() for x in column_meta_data_details]
+        source_column_names = [x.source_column_name for x in column_meta_data_details]
+        target_column_names = [x.column_name for x in column_meta_data_details]
 
         if not unprocessed_files:
             self.write_and_log(
@@ -177,22 +178,28 @@ class DataStandardization:
                     df = self.spark.read.table(f"{self.env}.{self.landing_table_name}")
 
                 # Rename columns all at once if counts match
-                if len(df.columns) == len(col_names):
-                    df = df.toDF(*col_names)
+                if len(df.columns) == len(source_column_names):
+                    df = df.toDF(*target_column_names)
 
-                # Build transformations
-                transformations = self.build_column_transformations(df, data_standards)
+                    # Build transformations
+                    transformations = self.build_column_transformations(
+                        df, data_standards
+                    )
 
-                # Apply transformations with ALIAS to preserve schema compatibility
-                df = df.select([transformations[c].alias(c) for c in df.columns])
+                    # Apply transformations with ALIAS to preserve schema compatibility
+                    df = df.select([transformations[c].alias(c) for c in df.columns])
 
-                # Add batch_id column
-                df = df.withColumn("batch_id", lit(file.batch_id))
+                    # Add batch_id column
+                    df = df.withColumn("batch_id", lit(file.batch_id))
 
-                # Write output and log success
-                self.write_and_log(
-                    df, file.batch_id, start_time, file.source_file, "SUCCEEDED"
-                )
+                    # Write output and log success
+                    self.write_and_log(
+                        df, file.batch_id, start_time, file.source_file, "SUCCEEDED"
+                    )
+                else:
+                    raise Exception(
+                        f"Column header mismatch: expected {source_column_names} columns, found {df.columns} in source."
+                    )
 
             except Exception as e:
                 # Write empty dataframe & log failure (schema-safe if df exists)
