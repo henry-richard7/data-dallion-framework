@@ -11,17 +11,10 @@ class JsonDataMapper:
     """
 
     def __init__(self, mapping: dict, json_data):
-        """
-        Initialize the JsonDataMapper with mapping rules and JSON data.
-
-        Args:
-            mapping (Dict[str, str]): Dictionary mapping output keys to JSONPath expressions.
-            json_data (Any): JSON-like data (e.g., dict or list) to be parsed.
-        """
         self.mapping = mapping
         self.json_data = json_data
 
-    def convert_to_dict(self, data) -> list[dict]:
+    def convert_to_dict(self, data: dict) -> list[dict]:
         """
         Convert a dictionary of lists into a list of dictionaries.
 
@@ -38,21 +31,15 @@ class JsonDataMapper:
             >>> self.convert_to_dict(data)
             [{'name': 'Alice', 'age': 30}, {'name': 'Bob', 'age': 25}]
         """
-
         max_length = max(len(values) for values in data.values())
         result = []
+
         for i in range(max_length):
             item = {}
             for key, values in data.items():
-                if i < len(values):
-                    value = values[i]
-                else:
-                    value = values[-1]
+                value = values[i] if i < len(values) else values[-1]
+                item[key] = value
 
-                try:
-                    item[key] = int(value)
-                except ValueError:
-                    item[key] = value
             result.append(item)
         return result
 
@@ -75,12 +62,12 @@ class JsonDataMapper:
         """
         parsing_results = dict()
         for j_key, j_value in self.mapping.items():
-            temp_list = list()
+            temp_list = []
             jsonpath_expression = parse(j_value)
 
             for match in jsonpath_expression.find(self.json_data):
                 temp_list.append(match.value)
+
             parsing_results[j_key] = temp_list
 
-        parsed_data = self.convert_to_dict(parsing_results)
-        return parsed_data
+        return self.convert_to_dict(parsing_results)

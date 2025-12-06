@@ -147,6 +147,11 @@ class ctlApiConnectionsDtl(SQLModel, table=True):
         sa_column=Column(Text),
         description="Placeholders in the request body that need dynamic replacement.",
     )
+    key_to_add_to_data: Optional[str] = Field(
+        default=None,
+        sa_column=Column(Text),
+        description="The value to be as data to the dataset.",
+    )
     ssl_verify: Optional[str] = Field(
         default="Y",
         sa_column=Column(Text),

@@ -2,6 +2,7 @@ from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Text
 from typing import Optional
 
+
 class CtlColumnMetadata(SQLModel, table=True):
     """
     Maintains metadata about individual columns in datasets including data types, descriptions, and mappings.
@@ -16,13 +17,10 @@ class CtlColumnMetadata(SQLModel, table=True):
         description="Name of the table for which the column metadata is defined.",
     )
     dataset_id: int = Field(
-        primary_key=True,
-        description="ID of the dataset this column belongs to."
+        primary_key=True, description="ID of the dataset this column belongs to."
     )
     column_name: str = Field(
-        primary_key=True,
-        max_length=255,
-        description="Name of the column."
+        primary_key=True, max_length=255, description="Name of the column."
     )
     column_data_type: Optional[str] = Field(
         default=None,
@@ -44,14 +42,14 @@ class CtlColumnMetadata(SQLModel, table=True):
         sa_column=Column(Text),
         description="JSON path mapping used to extract value from raw JSON input.",
     )
+
     source_column_name: Optional[str] = Field(
         default=None,
         sa_column=Column(Text),
-        description="Original column name from the source dataset."
+        description="Original column name from the source dataset.",
     )
     column_sequence_number: Optional[int] = Field(
-        default=None,
-        description="Order of the column within the table structure."
+        default=None, description="Order of the column within the table structure."
     )
     column_tag: Optional[str] = Field(
         default=None,

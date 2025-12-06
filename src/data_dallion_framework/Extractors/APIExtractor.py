@@ -206,7 +206,7 @@ class APIAutomation:
         response.raise_for_status()
         return response.json()
 
-    def make_request(self, step) -> Union[dict, List[dict]]:
+    def make_request(self, step: dict) -> Union[dict, List[dict]]:
         """
         Process and execute a single API request step.
 
@@ -242,28 +242,31 @@ class APIAutomation:
         responses = []
         to_perform_requests = []
 
-        for body_value in step["body_values"]:
-            keys = list(body_value.keys())
-            values = list(body_value.values())
+        body_values: dict = step["body_values"]
+        keys = list(body_values.keys())
+        values = list(body_values.values())
 
-            # Create all combinations of the placeholder values
-            for combination in itertools.product(*values):
+        for combination in itertools.product(*values):
 
-                temp_json_body = json.dumps(
-                    json_body
-                )  # Make a copy of the original JSON string
-                temp_params = json.dumps(data)
+            temp_json_body = json.dumps(json_body)
+            temp_data = json.dumps(data)
+            temp_params = json.dumps(params)
 
-                # Replace each placeholder with the corresponding value from the combination
-                for key, val in zip(keys, combination):
-                    temp_json_body = temp_json_body.replace(key, val)
-                    temp_params = temp_params.replace(key, val)
+            # Replace placeholders
+            for key, val in zip(keys, combination):
+                temp_json_body = temp_json_body.replace(key, val)
+                temp_data = temp_data.replace(key, val)
+                temp_params_ = temp_params.replace(key, val)
 
-                to_perform_requests.append(
-                    json.loads(temp_json_body)
-                    if temp_json_body
-                    else json.loads(temp_params)
-                )
+            # Pick the non-empty JSON
+            if temp_json_body not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_json_body))
+
+            elif temp_data not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_data))
+
+            elif temp_params_ not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_params_))
 
         # Making use of niquests multiplexed feature.
         with niquests.Session(multiplexed=True) as s:
@@ -272,14 +275,25 @@ class APIAutomation:
                     method=method,
                     url=url,
                     headers=headers if headers else None,
-                    params=params if params else None,
+                    params=to_perform_request if params else None,
                     data=to_perform_request if data else None,
                     json=to_perform_request if json_body else None,
                     verify=ssl_verify,
                 )
+                print(response_.url)
                 responses.append(response_)
 
-        return {"values_based_response": [r.json() for r in responses]}
+        if not step.get("key_to_add_to_data"):
+            return {"values_based_response": [r.json() for r in responses]}
+        else:
+            return {
+                "values_based_response": [
+                    {**r.json(), "static_value": new_key}
+                    for r, new_key in zip(
+                        responses, step["body_values"][step["key_to_add_to_data"]]
+                    )
+                ]
+            }
 
     def execute_workflow(self) -> Union[dict, List[dict]]:
         """
@@ -301,12 +315,12 @@ class APIExtractor:
     def __init__(
         self,
         pre_ingestion_logs: list[logDataAcquisitionDetail],
-        inbound_location,
-        outbound_source_file_format,
-        file_pattern,
-        pre_ingestion_dataset_id,
-        outbound_file_delimiter,
-        process_id,
+        inbound_location: str,
+        outbound_source_file_format: str,
+        file_pattern: str,
+        pre_ingestion_dataset_id: int,
+        outbound_file_delimiter: str,
+        process_id: int,
     ):
         file_pattern = (
             file_pattern.split(".")[0] if "." in file_pattern else file_pattern
@@ -404,6 +418,21 @@ class APIExtractor:
                             api_connection_dtl.json_body
                         )
 
+                    if (
+                        api_connection_dtl.body_values is not None
+                        and api_connection_dtl.body_values != ""
+                    ):
+                        temp_dict["body_values"] = json_loads(
+                            api_connection_dtl.body_values
+                        )
+                    if (
+                        api_connection_dtl.key_to_add_to_data is not None
+                        and api_connection_dtl.key_to_add_to_data != ""
+                    ):
+                        temp_dict["key_to_add_to_data"] = (
+                            api_connection_dtl.key_to_add_to_data
+                        )
+
                 config.append(temp_dict)
 
             try:
@@ -414,8 +443,9 @@ class APIExtractor:
                     ).get_mapped_data()
                 else:
                     final_results = list()
+
                     for response in api_response.get("values_based_response"):
-                        mapped_data = JsonDataMapper(
+                        mapped_data = JsonDataMapper.JsonDataMapper(
                             mapping=json_mapping,
                             json_data=response,
                         ).get_mapped_data()
