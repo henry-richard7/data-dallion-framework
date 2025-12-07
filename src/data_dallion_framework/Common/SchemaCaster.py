@@ -67,7 +67,8 @@ class SchemaCaster:
                     )
                 else:
                     self.df = self.df.withColumn(
-                        column_name, self.df[column_name].cast(TimestampType())
+                        column_name,
+                        to_timestamp(self.df[column_name]),
                     )
 
         return self.df

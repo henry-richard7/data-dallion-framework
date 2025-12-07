@@ -195,7 +195,7 @@ class DataStandardization:
 
                     # Write output and log success
                     self.write_and_log(
-                        df, file.batch_id, start_time, file.source_file, "SUCCEEDED"
+                        file.batch_id, start_time, file.source_file, "SUCCEEDED"
                     )
                 else:
                     raise Exception(

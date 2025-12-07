@@ -177,25 +177,25 @@ class DataQualityCheck:
                 if resp["success"]
                 else ("FAILED" if dqm.criticality == "C" else "SUCCEEDED")
             )
-            orch.insert_log_dqm(
-                log_dqm=Logs.logDqmDtl(
-                    process_id=self.process_id,
-                    dataset_id=self.dataset_id,
-                    batch_id=batch_id,
-                    source_file=log.source_file,
-                    column_name=dqm.column_name,
-                    qc_type=dqm.qc_type,
-                    qc_param=dqm.qc_param,
-                    qc_filter=dqm.qc_filter,
-                    criticality=dqm.criticality,
-                    criticality_threshold_pct=dqm.criticality_threshold_pct,
-                    error_count=resp["error_count"],
-                    error_pct=resp["error_percentage"],
-                    status=status,
-                    dqm_start_time=start_time,
-                    dqm_end_time=datetime.now(),
-                )
+            log_dqm = Logs.logDqmDtl(
+                process_id=self.process_id,
+                dataset_id=self.dataset_id,
+                batch_id=batch_id,
+                source_file=log.source_file,
+                column_name=dqm.column_name,
+                qc_type=dqm.qc_type,
+                qc_param=dqm.qc_param,
+                qc_filter=dqm.qc_filter,
+                criticality=dqm.criticality,
+                criticality_threshold_pct=dqm.criticality_threshold_pct,
+                error_count=resp["error_count"],
+                error_pct=resp["error_percentage"],
+                status=status,
+                dqm_start_time=start_time,
+                dqm_end_time=datetime.now(),
             )
+            print(f"Logging DQM Result: {log_dqm}")
+            orch.insert_log_dqm(log_dqm=log_dqm)
 
     def start_dqm_check(self):
         for log in self.dqm_unprocessed_files:
@@ -211,7 +211,9 @@ class DataQualityCheck:
             for dqm in self.dqm_masters:
                 func = self.qc_type_to_function.get(dqm.qc_type)
                 if not func:
-                    continue
+                    raise Exception(
+                        f"Unsupported QC Type: {dqm.qc_type}. Supported types are {list(self.qc_type_to_function.keys())}"
+                    )
                 total = df.count()
                 resp = func(
                     df,
