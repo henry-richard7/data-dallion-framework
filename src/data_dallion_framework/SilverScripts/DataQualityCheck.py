@@ -1,7 +1,7 @@
 # optimized_dqm_check.py
 from datetime import datetime
 from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, lit, length
+from pyspark.sql.functions import col, lit, length, concat_ws
 from ast import literal_eval
 from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats
 from data_dallion_framework.Common.Models import Logs, DqmMaster
@@ -70,14 +70,37 @@ class DataQualityCheck:
         failed = total - passed_df.count()
         return failed, (failed / total) * 100 if total else 0
 
-    def write_failed(self, input_df: DataFrame, passed_df, column, check_type, path):
+    # def write_failed(self, input_df: DataFrame, passed_df, column, check_type, path):
+    #     failed = (
+    #         input_df.subtract(passed_df)
+    #         .withColumn("dqm_check_type", lit(check_type))
+    #         .withColumn("failed_column_name", lit(column))
+    #         .withColumn("fail_value", col(column))
+    #         .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+    #     )
+
+    #     failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
+
+    def write_failed(self, input_df, passed_df, column, check_type, path):
         failed = (
             input_df.subtract(passed_df)
             .withColumn("dqm_check_type", lit(check_type))
             .withColumn("failed_column_name", lit(column))
-            .withColumn("fail_value", col(column))
-            .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
         )
+
+        # Handle multi-column case (Unique checks)
+        if "," in column:
+            cols = column.split(",")
+            failed = failed.withColumn(
+                "fail_value", concat_ws("|", *[col(c) for c in cols])
+            )
+        else:
+            failed = failed.withColumn("fail_value", col(column))
+
+        failed = failed.select(
+            "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
+        )
+
         failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
 
     def _prepare_result(self, df, fail_count, fail_pct, threshold):

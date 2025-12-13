@@ -17,6 +17,7 @@ from data_dallion_framework.Common import (
     OrchestrationProcess,
 )
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
+from dateutil.relativedelta import relativedelta
 
 
 class APIAutomation:
@@ -43,51 +44,155 @@ class APIAutomation:
         self.data = {}
         self.json_body = {}
 
-    def _replace_date(self, date_match) -> str:
-        """
-        Replace date placeholders like `$current_date-7$` with actual dates.
+    # def _replace_date(self, date_match) -> str:
+    #     """
+    #     Replace date placeholders like `$current_date-7$` with actual dates.
 
-        Args:
-            date_match (str): Placeholder string like "$current_date-7:%Y-%m$".
+    #     Args:
+    #         date_match (str): Placeholder string like "$current_date-7:%Y-%m$".
 
-        Returns:
-            date: Formatted date string.
-        """
+    #     Returns:
+    #         date: Formatted date string.
+    #     """
 
+    #     if ":" in date_match:
+    #         date_part, date_format = date_match.split(":")
+    #         date_format = date_format.replace("$", "")
+    #     else:
+    #         date_part, date_format = date_match, "%Y-%m-%d"
+
+    #     date_generation_match = re.search(r"-\d+", date_part)
+    #     days_to_subtract = (
+    #         int(date_generation_match.group()) if date_generation_match else 0
+    #     )
+
+    #     new_date = (datetime.today() + timedelta(days=days_to_subtract)).strftime(
+    #         date_format
+    #     )
+    #     return new_date
+
+    # def date_parse_changer(self, body: dict) -> dict:
+    #     """
+    #     Replace all date placeholders in the request body with real values.
+
+    #     Args:
+    #         body (dict): The original request body possibly containing date placeholders.
+
+    #     Returns:
+    #         dict: Updated body with placeholders replaced.
+    #     """
+
+    #     body = json.dumps(body)
+    #     date_matches = re.findall(r"\$current_date(?:-\d+)?(?::[^$]+)?\$", body)
+
+    #     for date_match in date_matches:
+    #         body = body.replace(date_match, self._replace_date(date_match))
+
+    #     return json.loads(body)
+
+    def date_parse_changer(self, body: dict) -> dict:
+        body = json.dumps(body)
+
+        # Supports:
+        # $key-7$, $key+2$
+        # $key-1M$, $key+3M$
+        # $key-1Y:%Y-%m$, etc.
+        pattern = (
+            r"\$(current_date|current_timestamp|current_month_start|current_month_end|"
+            r"current_week_start|current_week_end)"
+            r"(?:[-+][0-9]+[MY]?)?(?::[^$]+)?\$"
+        )
+
+        matches = re.findall(pattern, body)
+
+        full_matches = re.findall(
+            r"\$(?:current_date|current_timestamp|current_month_start|current_month_end|"
+            r"current_week_start|current_week_end)(?:[-+][0-9]+[MY]?)?(?::[^$]+)?\$",
+            body,
+        )
+
+        for match in full_matches:
+            body = body.replace(match, self._replace_date(match))
+
+        return json.loads(body)
+
+    def _replace_date(self, date_match: str) -> str:
+
+        # -------- Extract format --------
         if ":" in date_match:
             date_part, date_format = date_match.split(":")
             date_format = date_format.replace("$", "")
         else:
-            date_part, date_format = date_match, "%Y-%m-%d"
+            date_part = date_match
 
-        date_generation_match = re.search(r"-\d+", date_part)
-        days_to_subtract = (
-            int(date_generation_match.group()) if date_generation_match else 0
-        )
+            if "current_timestamp" in date_part:
+                date_format = "%s"
+            else:
+                date_format = "%Y-%m-%d"
 
-        new_date = (datetime.today() + timedelta(days=days_to_subtract)).strftime(
-            date_format
-        )
-        return new_date
+        date_part = date_part.replace("$", "")
 
-    def date_parse_changer(self, body: dict) -> dict:
-        """
-        Replace all date placeholders in the request body with real values.
+        # -------- Extract +/- subtraction --------
+        # Matches:
+        # -7, +3, -1M, +2Y, etc.
+        subtract_match = re.search(r"([-+])([0-9]+)([MY]?)", date_part)
 
-        Args:
-            body (dict): The original request body possibly containing date placeholders.
+        offset_sign = "+"
+        offset_value = 0
+        offset_type = "D"  # default days
 
-        Returns:
-            dict: Updated body with placeholders replaced.
-        """
+        if subtract_match:
+            offset_sign = subtract_match.group(1)
+            offset_value = int(subtract_match.group(2))
+            offset_type = subtract_match.group(3) or "D"
 
-        body = json.dumps(body)
-        date_matches = re.findall(r"\$current_date(?:-\d+)?(?::[^$]+)?\$", body)
+        # Normalize into +N or -N integer
+        if offset_sign == "-":
+            offset_value = -offset_value
 
-        for date_match in date_matches:
-            body = body.replace(date_match, self._replace_date(date_match))
+        # Clean placeholder key
+        base_key = re.sub(r"[-+][0-9]+[MY]?", "", date_part)
 
-        return json.loads(body)
+        # -------- Compute base date --------
+        base_date = self._get_base_date(base_key)
+
+        # -------- Apply offset AFTER computing base --------
+        if offset_type == "D":
+            base_date = base_date + timedelta(days=offset_value)
+        elif offset_type == "M":
+            base_date = base_date + relativedelta(months=offset_value)
+        elif offset_type == "Y":
+            base_date = base_date + relativedelta(years=offset_value)
+
+        # -------- Return formatted result --------
+        if date_format == "%s":
+            return str(int(base_date.timestamp()))
+        else:
+            return base_date.strftime(date_format)
+
+    def _get_base_date(self, key: str) -> datetime:
+        today = datetime.today()
+
+        if key == "current_date":
+            return datetime(today.year, today.month, today.day)
+
+        if key == "current_timestamp":
+            return today
+
+        if key == "current_month_start":
+            return datetime(today.year, today.month, 1)
+
+        if key == "current_month_end":
+            next_month = today.replace(day=28) + timedelta(days=4)
+            return datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
+
+        if key == "current_week_start":
+            return today - timedelta(days=today.weekday())  # Monday
+
+        if key == "current_week_end":
+            return today + timedelta(days=(6 - today.weekday()))  # Sunday
+
+        raise ValueError(f"Unknown placeholder: {key}")
 
     def fetch_token(self, step: dict):
         """
@@ -445,6 +550,7 @@ class APIExtractor:
                     final_results = list()
 
                     for response in api_response.get("values_based_response"):
+                        print(response)
                         mapped_data = JsonDataMapper.JsonDataMapper(
                             mapping=json_mapping,
                             json_data=response,
