@@ -5,15 +5,15 @@ description = "DataDallion Framework is a comprehensive metadata-driven data eng
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "boto3>=1.40.1",
+    "boto3>=1.42.76",
     "jinja2>=3.1.6",
-    "jsonpath-ng>=1.7.0",
+    "jsonpath-ng>=1.8.0",
     "jwt>=1.4.0",
-    "niquests>=3.14.1",
-    "paramiko>=3.5.1",
-    "polars>=1.32.0",
-    "pydantic-settings>=2.10.1",
-    "sqlmodel>=0.0.24",
+    "niquests>=3.18.2",
+    "paramiko>=4.0.0",
+    "polars>=1.39.3",
+    "pydantic-settings>=2.13.1",
+    "sqlmodel>=0.0.37",
 ]
 
 [project.scripts]
@@ -21,11 +21,11 @@ data-dallion-framework = "data_dallion_framework:main"
 
 [project.optional-dependencies]
 extras = [
-    "pyspark>=4.0.0",
+    "pyspark>=4.1.1",
     "delta-spark"
 ]
 sql-backend = [
-    "mariadb>=1.1.13",
+    "mariadb>=1.1.14",
 ]
 
 [build-system]
@@ -34,5 +34,5 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "ipykernel>=6.30.0",
+    "ipykernel>=7.2.0",
 ]
