@@ -34,68 +34,14 @@ def validate_pattern(file_pattern: str, file_name: str, custom: bool = False) ->
         >>> validate_pattern(r"data_\\d{8}\\.csv", "data_20250405.csv", custom=True)
         True
     """
-    if not custom:
-        if "YYYYMMDD" in file_pattern:
-            if "*" in file_pattern:
-                regex_pattern_, other_pattern = file_pattern.split("*")
-                regex_pattern = (
-                    regex_pattern_
-                    + ".*"
-                    + other_pattern.replace("YYYYMMDD", "[0-9]{8}")
-                )
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
+    if custom:
+        return bool(regex_pattern_matches(file_pattern, file_name))
 
-            else:
-                regex_pattern = file_pattern.replace("YYYYMMDD", "[0-9]{8}")
+    regex_pattern = (
+        file_pattern.replace("YYYYMMDD", "[0-9]{8}")
+        .replace("YYYYMM", "[0-9]{6}")
+        .replace("YYYY", "[0-9]{4}")
+        .replace("*", ".*")
+    )
 
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
-
-        elif "YYYYMM" in file_pattern:
-            if "*" in file_pattern:
-                regex_pattern_, other_pattern = file_pattern.split("*")
-                regex_pattern = (
-                    regex_pattern_ + ".*" + other_pattern.replace("YYYYMM", "[0-9]{6}")
-                )
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
-
-            else:
-                regex_pattern = file_pattern.replace("YYYYMM", "[0-9]{6}")
-
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
-
-        elif "YYYY" in file_pattern:
-            if "*" in file_pattern:
-                regex_pattern_, other_pattern = file_pattern.split("*")
-                regex_pattern = (
-                    regex_pattern_ + ".*" + other_pattern.replace("YYYY", "[0-9]{4}")
-                )
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
-
-            else:
-                regex_pattern = file_pattern.replace("YYYY", "[0-9]{4}")
-
-                if regex_pattern_matches(regex_pattern, file_name):
-                    return True
-                else:
-                    return False
-
-    else:
-        if regex_pattern_matches(file_pattern, file_name):
-            return True
-        else:
-            return False
+    return bool(regex_pattern_matches(regex_pattern, file_name))

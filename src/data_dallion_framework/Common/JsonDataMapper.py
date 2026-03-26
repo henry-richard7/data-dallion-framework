@@ -31,17 +31,18 @@ class JsonDataMapper:
             >>> self.convert_to_dict(data)
             [{'name': 'Alice', 'age': 30}, {'name': 'Bob', 'age': 25}]
         """
+        if not data:
+            return []
+
         max_length = max(len(values) for values in data.values())
-        result = []
+        padded_data = {
+            k: v + [v[-1]] * (max_length - len(v)) if v else [] for k, v in data.items()
+        }
 
-        for i in range(max_length):
-            item = {}
-            for key, values in data.items():
-                value = values[i] if i < len(values) else values[-1]
-                item[key] = value
-
-            result.append(item)
-        return result
+        return [
+            dict(zip(padded_data.keys(), values))
+            for values in zip(*padded_data.values())
+        ]
 
     def get_mapped_data(self) -> list[dict]:
         """
