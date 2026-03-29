@@ -17,3 +17,10 @@ tests/publish/*
 
 # environments
 .env
+
+*.csv
+*.parquet
+*.json
+*.log
+*.txt
+*.db
