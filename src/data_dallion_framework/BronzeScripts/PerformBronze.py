@@ -1,4 +1,4 @@
-from data_dallion_framework.Common import OrchestrationProcess, PatternValidator, DDLGenerator
+from data_dallion_framework.Common import OrchestrationProcess, PatternValidator, DDLGenerator, Constants
 from data_dallion_framework.Common.Models.Logs import (
     logDataAcquisitionDetail,
     logRawProcessDtl,
@@ -175,7 +175,7 @@ class PerformBronze:
 
             # External table creation via Jinja2
             partition_cols = dataset.landing_partition_columns.split(",") if dataset.landing_partition_columns else []
-            if dataset.table_location_type.lower() == "external":
+            if dataset.table_location_type.lower() == Constants.TABLE_TYPE_EXTERNAL:
                 columns = [{"name": c.column_name, "type": c.column_data_type} for c in column_meta_data_details]
                 ddl = self.ddl_gen.generate_ddl(
                     env=self.env, table_name=dataset.landing_table, columns=columns,
@@ -192,7 +192,7 @@ class PerformBronze:
                     orch.insert_log_raw_process_detail(log_raw_process_dtl=logRawProcessDtl(
                         batch_id=batch_id, process_id=self.process_id, dataset_id=dataset.dataset_id,
                         source_file=new_file, landing_location=dataset.landing_location,
-                        file_status="SUCCEEDED", file_process_start_time=start_time, file_process_end_time=datetime.now()
+                        file_status=Constants.STATUS_SUCCEEDED, file_process_start_time=start_time, file_process_end_time=datetime.now()
                     ))
 
         except Exception as e:
@@ -202,7 +202,7 @@ class PerformBronze:
                     orch.insert_log_raw_process_detail(log_raw_process_dtl=logRawProcessDtl(
                         process_id=self.process_id, dataset_id=dataset.dataset_id,
                         source_file=new_file, landing_location=dataset.landing_location,
-                        file_status="FAILED", exception_details=str(e),
+                        file_status=Constants.STATUS_FAILED, exception_details=str(e),
                         file_process_start_time=start_time, file_process_end_time=datetime.now()
                     ))
             raise

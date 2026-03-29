@@ -2,7 +2,7 @@
 from datetime import datetime
 from pyspark.sql import DataFrame, SparkSession, functions as F
 from ast import literal_eval
-from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats
+from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats, Constants
 from data_dallion_framework.Common.Models import Logs, DqmMaster
 
 
@@ -153,7 +153,7 @@ class DataQualityCheck:
                 
                 self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
                 
-                if not success and dqm.criticality == 'C':
+                if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
                     self.flush_logs()
                     raise Exception(f"Critical DQM check failed: {dqm.column_name} in batch {bid}")
                 
@@ -190,7 +190,7 @@ class DataQualityCheck:
         failed.write.format("delta").mode("append").partitionBy("batch_id").save(self.dqm_error_location)
 
     def buffer_log(self, dqm, log, batch_id, fail_count, fail_pct, success, start_time):
-        status = "SUCCEEDED" if success else ("FAILED" if dqm.criticality == "C" else "SUCCEEDED")
+        status = Constants.STATUS_SUCCEEDED if success else (Constants.STATUS_FAILED if dqm.criticality == Constants.CRITICALITY_CRITICAL else Constants.STATUS_SUCCEEDED)
         log_entry = Logs.logDqmDtl(
             process_id=self.process_id,
             dataset_id=self.dataset_id,
@@ -223,7 +223,7 @@ class DataQualityCheck:
         original_cols = [c for c in df.columns if not (c.startswith("passed_") or c in ["final_valid", "all_valid_so_far"])]
         df = df.select(*original_cols)
         
-        if self.table_location_type.lower() == "external":
+        if self.table_location_type.lower() == Constants.TABLE_TYPE_EXTERNAL:
             df.write.format("delta").mode("append").partitionBy(self.staging_partition_columns.split(",")).save(self.staging_location)
             df.write.format("delta").mode("append").partitionBy(self.publish_partition_columns.split(",")).save(self.publish_location)
         else:

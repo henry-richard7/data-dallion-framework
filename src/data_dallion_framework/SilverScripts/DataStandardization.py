@@ -12,7 +12,7 @@ from pyspark.sql.functions import (
     lower,
     lit,
 )
-from data_dallion_framework.Common import OrchestrationProcess
+from data_dallion_framework.Common import OrchestrationProcess, Constants
 from data_dallion_framework.Common.Models.Logs import logDataStandardisationDtl
 from data_dallion_framework.Common.Models.DataStandardisation import (
     ctlDataStandardisationDtl,
@@ -154,7 +154,7 @@ class DataStandardization:
 
         try:
             # Optimization: Bulk read all pending batches
-            if self.table_location_type.lower() == "external":
+            if self.table_location_type.lower() == Constants.TABLE_TYPE_EXTERNAL:
                 df = (
                     self.spark.read.format("delta")
                     .load(self.landing_location)
@@ -187,7 +187,7 @@ class DataStandardization:
                 ).save(self.data_standardisation_location)
 
                 # Log success for all batches
-                self.write_and_log_batch(unprocessed_files, "SUCCEEDED", start_time)
+                self.write_and_log_batch(unprocessed_files, Constants.STATUS_SUCCEEDED, start_time)
             
             else:
                 raise Exception(
@@ -196,5 +196,5 @@ class DataStandardization:
 
         except Exception as e:
             # Log failure for all batches
-            self.write_and_log_batch(unprocessed_files, "FAILED", start_time, str(e))
+            self.write_and_log_batch(unprocessed_files, Constants.STATUS_FAILED, start_time, str(e))
             raise
