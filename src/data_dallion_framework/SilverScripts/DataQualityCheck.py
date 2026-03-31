@@ -84,6 +84,8 @@ class DataQualityCheck:
             return f"{col_name} IN ({values})"
         elif tp == "Blank":
             return f"trim({col_name}) != ''"
+        elif tp == "Custom":
+            return param
         return "1=1"
 
     def start_dqm_check(self):
@@ -91,79 +93,116 @@ class DataQualityCheck:
         if not batch_ids:
             return
 
-        # Optimization: Process all batches in one pass
-        full_df = (
-            self.spark.read.format("delta")
-            .load(self.data_standardisation_location)
-            .filter(F.col("batch_id").isin(batch_ids))
-        )
+        try:
+            # Optimization: Process all batches in one pass
+            full_df = (
+                self.spark.read.format("delta")
+                .load(self.data_standardisation_location)
+                .filter(F.col("batch_id").isin(batch_ids))
+            )
 
-        simple_rules = [d for d in self.dqm_masters if d.qc_type not in ["Unique", "Custom"]]
+            # Separate rules: Unique rules require actions (dropDuplicates), others are row-level
+            one_pass_rules = [d for d in self.dqm_masters if d.qc_type != "Unique"]
+            unique_rules = [d for d in self.dqm_masters if d.qc_type == "Unique"]
+            
+            # We handle batches individually for result logging and write-out
+            for batch_log in self.dqm_unprocessed_files:
+                start_time = datetime.now()
+                bid = batch_log.batch_id
+                df = full_df.filter(F.col("batch_id") == bid)
+                
+                # --- Phase 1: Row-level rules (Null, Length, Date, Regex, Custom, etc.) ---
+                if one_pass_rules:
+                    agg_exprs = [F.count("*").alias("total_rows")]
+                    rule_meta = []
+                    current_valid_expr = F.lit(True)
+                    
+                    for dqm in one_pass_rules:
+                        cond_str = self.get_qc_condition(dqm)
+                        if dqm.qc_filter:
+                            filter_expr = " AND ".join(dqm.qc_filter.split(","))
+                            rule_valid_expr = F.expr(f"({filter_expr}) AND ({cond_str})")
+                        else:
+                            rule_valid_expr = F.expr(cond_str)
+                        
+                        next_valid_expr = current_valid_expr & rule_valid_expr
+                        rule_pass_col = f"passed_{dqm.qc_id}"
+                        df = df.withColumn(rule_pass_col, F.when(next_valid_expr, 1).otherwise(0))
+                        
+                        agg_exprs.append(F.sum(rule_pass_col).alias(f"sum_{dqm.qc_id}"))
+                        rule_meta.append((dqm, rule_pass_col))
+                        current_valid_expr = next_valid_expr
+
+                    df = df.withColumn("final_valid", F.when(current_valid_expr, 1).otherwise(0))
+                    metrics = df.agg(*agg_exprs).collect()[0]
+                    total = metrics["total_rows"]
+                    
+                    prev_sum = total
+                    for dqm, rule_pass_col in rule_meta:
+                        curr_sum = metrics[f"sum_{dqm.qc_id}"] or 0
+                        fail_count = prev_sum - curr_sum
+                        fail_pct = (fail_count / total * 100) if total > 0 else 0
+                        success = fail_pct < (dqm.criticality_threshold_pct or 0)
+                        
+                        if fail_count > 0:
+                            self._write_failed_optimized(df, bid, dqm, rule_pass_col)
+                        
+                        self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
+                        if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
+                            raise Exception(f"Critical DQM check failed: {dqm.column_name} in batch {bid}")
+                        prev_sum = curr_sum
+                    
+                    df = df.filter(F.col("final_valid") == 1)
+                
+                # --- Phase 2: Unique rules (Sequential using dropDuplicates) ---
+                for dqm in unique_rules:
+                    before_count = df.count()
+                    if before_count == 0:
+                        self.buffer_log(dqm, batch_log, bid, 0, 0, True, start_time)
+                        continue
+                        
+                    unique_cols = [c.strip() for c in dqm.column_name.split(",")]
+                    df_unique = df.dropDuplicates(unique_cols)
+                    after_count = df_unique.count()
+                    
+                    fail_count = before_count - after_count
+                    fail_pct = (fail_count / before_count * 100)
+                    success = fail_pct < (dqm.criticality_threshold_pct or 0)
+                    
+                    if fail_count > 0:
+                        failed_rows = df.subtract(df_unique)
+                        self._write_unique_failed(failed_rows, bid, dqm)
+                    
+                    self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
+                    if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
+                        raise Exception(f"Critical Uniqueness check failed: {dqm.column_name} in batch {bid}")
+                    
+                    df = df_unique
+
+                # Handle case where NO rules were defined
+                if not one_pass_rules and not unique_rules:
+                    self.buffer_log(DqmMaster.ctlDqmMasterDtl(qc_id=0, column_name="N/A", qc_type="N/A", criticality="W"), batch_log, bid, 0, 0, True, start_time)
+
+                # Final write of the now-validated dataframe
+                self._write_data_optimized(df, bid)
+
+        except Exception as e:
+            # Buffer a generic failure if we don't have rule context here
+            # But flush_logs() in finally will save whatever is in the buffer so far
+            raise
+        finally:
+            self.flush_logs()
+
+    def _write_unique_failed(self, failed_df: DataFrame, batch_id, dqm):
+        # Uniqueness failure handling: log the duplicate values
+        cols = [c.strip() for c in dqm.column_name.split(",")]
+        # Cast key columns to string for unified "fail_value"
+        failed = failed_df.withColumn("dqm_check_type", F.lit(dqm.qc_type)) \
+                          .withColumn("failed_column_name", F.lit(dqm.column_name)) \
+                          .withColumn("fail_value", F.concat_ws(",", *[F.col(c) for c in cols])) \
+                          .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
         
-        # We handle batches individually for result logging and write-out
-        for batch_log in self.dqm_unprocessed_files:
-            start_time = datetime.now()
-            bid = batch_log.batch_id
-            df = full_df.filter(F.col("batch_id") == bid)
-            
-            # Optimization: One aggregation to get all failure counts
-            agg_exprs = [F.count("*").alias("total_rows")]
-            rule_meta = []
-            
-            # Progressive validation logic
-            current_valid_expr = F.lit(True)
-            
-            for dqm in simple_rules:
-                cond_str = self.get_qc_condition(dqm)
-                
-                # Filter logic: row is valid if (Satisfies Filter AND Satisfies Cond) OR (NOT Satisfies Filter)
-                # Actually, current behavior is: row is valid ONLY if satisfies both.
-                if dqm.qc_filter:
-                    filter_expr = " AND ".join(dqm.qc_filter.split(","))
-                    rule_valid_expr = F.expr(f"({filter_expr}) AND ({cond_str})")
-                else:
-                    rule_valid_expr = F.expr(cond_str)
-                
-                # Rule passes if previous was valid AND this one is valid
-                next_valid_expr = current_valid_expr & rule_valid_expr
-                rule_pass_col = f"passed_{dqm.qc_id}"
-                df = df.withColumn(rule_pass_col, F.when(next_valid_expr, 1).otherwise(0))
-                
-                agg_exprs.append(F.sum(rule_pass_col).alias(f"sum_{dqm.qc_id}"))
-                rule_meta.append((dqm, rule_pass_col))
-                current_valid_expr = next_valid_expr
-
-            # Add final valid flag
-            df = df.withColumn("final_valid", F.when(current_valid_expr, 1).otherwise(0))
-            
-            # Execute aggregation
-            metrics = df.agg(*agg_exprs).collect()[0]
-            total = metrics["total_rows"]
-            
-            prev_sum = total
-            for dqm, rule_pass_col in rule_meta:
-                curr_sum = metrics[f"sum_{dqm.qc_id}"] or 0
-                fail_count = prev_sum - curr_sum
-                fail_pct = (fail_count / total * 100) if total > 0 else 0
-                
-                success = fail_pct < dqm.criticality_threshold_pct
-                
-                if fail_count > 0:
-                    self._write_failed_optimized(df, bid, dqm, rule_pass_col)
-                
-                self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
-                
-                if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
-                    self.flush_logs()
-                    raise Exception(f"Critical DQM check failed: {dqm.column_name} in batch {bid}")
-                
-                prev_sum = curr_sum
-            
-            # Write out passing data
-            passing_df = df.filter(F.col("final_valid") == 1)
-            self._write_data_optimized(passing_df, bid)
-
-        self.flush_logs()
+        failed.write.format("delta").mode("append").partitionBy("batch_id").save(self.dqm_error_location)
 
     def _write_failed_optimized(self, df: DataFrame, batch_id, dqm, rule_pass_col):
         # Rows that FAILED this specific rule (were valid before but invalid now)

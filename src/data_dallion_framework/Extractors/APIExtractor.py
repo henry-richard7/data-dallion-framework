@@ -3,21 +3,18 @@ import base64
 import jwt
 from datetime import datetime, timedelta, timezone
 import csv
-from typing import Union, List, Generator
+from typing import Union, List
 import itertools
 from json import loads as json_loads
 import json
 from pathlib import Path
 import re
 import traceback
-from niquests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from data_dallion_framework.Common import (
     JsonDataMapper,
     FileNameGenerator,
     OrchestrationProcess,
-    Constants
 )
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 from dateutil.relativedelta import relativedelta
@@ -25,85 +22,201 @@ from dateutil.relativedelta import relativedelta
 
 class APIAutomation:
     """
-    A class used to automate API requests with retry logic and dynamic request body generation.
+    A class used to automate API requests based on a configuration dictionary.
+
+    This class supports authentication via multiple mechanisms and dynamic request body generation.
+    It allows workflow execution over multiple API steps and handles token-based authentication.
     """
 
     def __init__(self, config):
+        """
+        Initialize the API automation instance with a configuration dictionary.
+
+        Args:
+            config (dict): A dictionary containing configurations for the API.
+                Must contain required keys like 'method', 'url', etc., depending on the step type.
+        """
+
         self.token = None
         self.config = config
         self.headers = {}
         self.params = {}
         self.data = {}
         self.json_body = {}
-        
-        # Setup session with retry logic
-        self.session = niquests.Session(multiplexed=True)
-        retry_strategy = Retry(
-            total=Constants.API_DEFAULT_RETRIES,
-            backoff_factor=Constants.API_BACKOFF_FACTOR,
-            status_forcelist=[429, 500, 502, 503, 504],
+
+    # def _replace_date(self, date_match) -> str:
+    #     """
+    #     Replace date placeholders like `$current_date-7$` with actual dates.
+
+    #     Args:
+    #         date_match (str): Placeholder string like "$current_date-7:%Y-%m$".
+
+    #     Returns:
+    #         date: Formatted date string.
+    #     """
+
+    #     if ":" in date_match:
+    #         date_part, date_format = date_match.split(":")
+    #         date_format = date_format.replace("$", "")
+    #     else:
+    #         date_part, date_format = date_match, "%Y-%m-%d"
+
+    #     date_generation_match = re.search(r"-\d+", date_part)
+    #     days_to_subtract = (
+    #         int(date_generation_match.group()) if date_generation_match else 0
+    #     )
+
+    #     new_date = (datetime.today() + timedelta(days=days_to_subtract)).strftime(
+    #         date_format
+    #     )
+    #     return new_date
+
+    # def date_parse_changer(self, body: dict) -> dict:
+    #     """
+    #     Replace all date placeholders in the request body with real values.
+
+    #     Args:
+    #         body (dict): The original request body possibly containing date placeholders.
+
+    #     Returns:
+    #         dict: Updated body with placeholders replaced.
+    #     """
+
+    #     body = json.dumps(body)
+    #     date_matches = re.findall(r"\$current_date(?:-\d+)?(?::[^$]+)?\$", body)
+
+    #     for date_match in date_matches:
+    #         body = body.replace(date_match, self._replace_date(date_match))
+
+    #     return json.loads(body)
+
+    def date_parse_changer(self, body: dict) -> dict:
+        body = json.dumps(body)
+
+        # Supports:
+        # $key-7$, $key+2$
+        # $key-1M$, $key+3M$
+        # $key-1Y:%Y-%m$, etc.
+        pattern = (
+            r"\$(current_date|current_timestamp|current_month_start|current_month_end|"
+            r"current_week_start|current_week_end)"
+            r"(?:[-+][0-9]+[MY]?)?(?::[^$]+)?\$"
         )
-        adapter = HTTPAdapter(max_retries=retry_strategy)
-        self.session.mount("https://", adapter)
-        self.session.mount("http://", adapter)
+
+        matches = re.findall(pattern, body)
+
+        full_matches = re.findall(
+            r"\$(?:current_date|current_timestamp|current_month_start|current_month_end|"
+            r"current_week_start|current_week_end)(?:[-+][0-9]+[MY]?)?(?::[^$]+)?\$",
+            body,
+        )
+
+        for match in full_matches:
+            body = body.replace(match, self._replace_date(match))
+
+        return json.loads(body)
 
     def _replace_date(self, date_match: str) -> str:
-        # (Logic unchanged)
+
+        # -------- Extract format --------
         if ":" in date_match:
             date_part, date_format = date_match.split(":")
             date_format = date_format.replace("$", "")
         else:
             date_part = date_match
-            date_format = "%s" if "current_timestamp" in date_part else "%Y-%m-%d"
+
+            if "current_timestamp" in date_part:
+                date_format = "%s"
+            else:
+                date_format = "%Y-%m-%d"
 
         date_part = date_part.replace("$", "")
+
+        # -------- Extract +/- subtraction --------
+        # Matches:
+        # -7, +3, -1M, +2Y, etc.
         subtract_match = re.search(r"([-+])([0-9]+)([MY]?)", date_part)
 
+        offset_sign = "+"
         offset_value = 0
-        offset_type = "D"
+        offset_type = "D"  # default days
+
         if subtract_match:
             offset_sign = subtract_match.group(1)
             offset_value = int(subtract_match.group(2))
             offset_type = subtract_match.group(3) or "D"
-            if offset_sign == "-": offset_value = -offset_value
 
+        # Normalize into +N or -N integer
+        if offset_sign == "-":
+            offset_value = -offset_value
+
+        # Clean placeholder key
         base_key = re.sub(r"[-+][0-9]+[MY]?", "", date_part)
+
+        # -------- Compute base date --------
         base_date = self._get_base_date(base_key)
 
-        if offset_type == "D": base_date += timedelta(days=offset_value)
-        elif offset_type == "M": base_date += relativedelta(months=offset_value)
-        elif offset_type == "Y": base_date += relativedelta(years=offset_value)
+        # -------- Apply offset AFTER computing base --------
+        if offset_type == "D":
+            base_date = base_date + timedelta(days=offset_value)
+        elif offset_type == "M":
+            base_date = base_date + relativedelta(months=offset_value)
+        elif offset_type == "Y":
+            base_date = base_date + relativedelta(years=offset_value)
 
-        return str(int(base_date.timestamp())) if date_format == "%s" else base_date.strftime(date_format)
+        # -------- Return formatted result --------
+        if date_format == "%s":
+            return str(int(base_date.timestamp()))
+        else:
+            return base_date.strftime(date_format)
 
     def _get_base_date(self, key: str) -> datetime:
         today = datetime.today()
-        if key == "current_date": return datetime(today.year, today.month, today.day)
-        if key == "current_timestamp": return today
-        if key == "current_month_start": return datetime(today.year, today.month, 1)
+
+        if key == "current_date":
+            return datetime(today.year, today.month, today.day)
+
+        if key == "current_timestamp":
+            return today
+
+        if key == "current_month_start":
+            return datetime(today.year, today.month, 1)
+
         if key == "current_month_end":
             next_month = today.replace(day=28) + timedelta(days=4)
             return datetime(next_month.year, next_month.month, 1) - timedelta(days=1)
-        if key == "current_week_start": return today - timedelta(days=today.weekday())
-        if key == "current_week_end": return today + timedelta(days=(6 - today.weekday()))
+
+        if key == "current_week_start":
+            return today - timedelta(days=today.weekday())  # Monday
+
+        if key == "current_week_end":
+            return today + timedelta(days=(6 - today.weekday()))  # Sunday
+
         raise ValueError(f"Unknown placeholder: {key}")
 
-    def date_parse_changer(self, body: dict) -> dict:
-        body_str = json.dumps(body)
-        full_matches = re.findall(
-            r"\$(?:current_date|current_timestamp|current_month_start|current_month_end|"
-            r"current_week_start|current_week_end)(?:[-+][0-9]+[MY]?)?(?::[^$]+)?\$",
-            body_str,
-        )
-        for match in full_matches:
-            body_str = body_str.replace(match, self._replace_date(match))
-        return json.loads(body_str)
-
     def fetch_token(self, step: dict):
+        """
+        Fetch an authentication token from the given endpoint using the specified auth method.
+
+        Supported auth types:
+            - oauth
+            - service_account
+            - basic_auth
+            - custom
+
+        Sets the result in `self.headers`.
+
+        Args:
+            step (dict): Step configuration with token-related details.
+
+        Raises:
+            ValueError: If the provided `auth_type` is not supported.
+        """
+
         auth_type = step.get("auth_type")
-        
+
         if auth_type == "oauth":
-            response = self.session.request(
+            response = niquests.request(
                 method=step.get("method", "GET"),
                 url=step["token_url"],
                 data={
@@ -111,174 +224,380 @@ class APIAutomation:
                     "client_id": step["client_id"],
                     "client_secret": step["client_secret"],
                 },
-                timeout=Constants.API_DEFAULT_TIMEOUT
             )
             response.raise_for_status()
             self.headers = {
                 "Authorization": f"{step['token_type']} {response.json().get(step.get('token_path', 'access_token'))}"
             }
-        # ... (Rest of token types unchanged but using self.session and constants)
+
         elif auth_type == "service_account":
-             # (Legacy logic using self.session)
-             private_key = step["private_key"]
-             payload = {
-                 "iss": step["issuer"],
-                 "scope": step["scope"],
-                 "aud": step["token_url"],
-                 "exp": datetime.now(timezone.utc) + timedelta(minutes=60),
-                 "iat": datetime.now(timezone.utc),
-             }
-             jwt_token = jwt.encode(payload, private_key, algorithm="RS256")
-             response = self.session.post(
-                 step["token_url"],
-                 data={"grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer", "assertion": jwt_token},
-                 timeout=Constants.API_DEFAULT_TIMEOUT
-             )
-             response.raise_for_status()
-             self.headers = {"Authorization": f"Bearer {response.json().get(step.get('token_path', 'access_token'))}"}
+            private_key = step["private_key"]
+            payload = {
+                "iss": step["issuer"],
+                "scope": step["scope"],
+                "aud": step["token_url"],
+                "exp": datetime.now(timezone.utc) + timedelta(minutes=60),
+                "iat": datetime.now(timezone.utc),
+            }
+            jwt_token = jwt.encode(payload, private_key, algorithm="RS256")
+            response = niquests.post(
+                step["token_url"],
+                data={
+                    "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
+                    "assertion": jwt_token,
+                },
+            )
+            response.raise_for_status()
+            self.headers = {
+                "Authorization": f"Bearer {response.json().get(step.get('token_path', 'access_token'))}"
+            }
+
         elif auth_type == "basic_auth":
-            username, password = step["basic_auth"]["username"], step["basic_auth"]["password"]
-            self.headers = {"Authorization": "Basic " + base64.b64encode(f"{username}:{password}".encode()).decode()}
+            username, password = (
+                step["basic_auth"]["username"],
+                step["basic_auth"]["password"],
+            )
+            self.headers = {
+                "Authorization": "Basic "
+                + base64.b64encode(f"{username}:{password}".encode()).decode()
+            }
+
         elif auth_type == "custom":
-            response = self.session.request(method=step["method"].upper(), url=step["token_url"], timeout=Constants.API_DEFAULT_TIMEOUT).json()
-            self.headers = {"Authorization": "Bearer " + response.get(step["token_path"])}
+            response = niquests.request(
+                method=step["method"].upper(),
+                url=step["token_url"],
+            ).json()
+            self.headers = {
+                "Authorization": "Bearer " + response.get(step["token_path"])
+            }
+
         else:
             raise ValueError(f"Unsupported auth_type: {auth_type}")
 
-    def execute_request(self, method, url, headers, params, data, json_body, ssl_verify=True, stream=True):
-        """Executed a single request, optionally streaming the response to save memory."""
-        response = self.session.request(
-            method=method, url=url, headers=headers or None, params=params or None,
-            data=data or None, json=json_body or None, verify=ssl_verify,
-            timeout=Constants.API_DEFAULT_TIMEOUT,
-            stream=stream
+    def execute_request(
+        self,
+        method: str,
+        url: str,
+        headers: dict,
+        params: dict,
+        data: dict,
+        json_body: dict,
+        ssl_verify: bool = True,
+    ) -> Union[dict, List[dict]]:
+        """
+        Execute an API request and return the processed response.
+
+        Args:
+            method (str): HTTP method (e.g., GET, POST).
+            url (str): Full URL for the API request.
+            headers (dict): Request headers.
+            params (dict): Query parameters.
+            data (dict): Form-encoded data.
+            json_body (dict): JSON payload.
+
+        Returns:
+            JSON response parsed into a dict or list of dicts.
+        """
+
+        response = niquests.request(
+            method=method,
+            url=url,
+            headers=headers if headers else None,
+            params=params if params else None,
+            data=data if data else None,
+            json=json_body if json_body else None,
+            verify=ssl_verify,
         )
         response.raise_for_status()
-        return response
+        return response.json()
 
-    def make_request(self, step: dict) -> Generator[dict, None, None]:
+    def make_request(self, step: dict) -> Union[dict, List[dict]]:
+        """
+        Process and execute a single API request step.
+
+        Handles dynamic replacement of placeholder values and multiplexed requests.
+
+        Args:
+            step (dict): API step configuration including URL, method, headers, etc.
+
+        Returns:
+            Union[dict, List[dict]]: Parsed JSON response from the API.
+        """
+
         url, method = step["url"], step.get("method", "GET").upper()
         headers = {**self.headers, **step.get("headers", {})}
         ssl_verify = step.get("ssl_verify", True)
         params, data, json_body = map(
-            lambda k: {**getattr(self, k), **step.get(k, {})}, ["params", "data", "json_body"]
+            lambda k: {**getattr(self, k), **step.get(k, {})},
+            ["params", "data", "json_body"],
         )
 
-        # Date parsing
-        if "$current_date" in str(data): data = self.date_parse_changer(data)
-        if "$current_date" in str(json_body): json_body = self.date_parse_changer(json_body)
-        if "$current_date" in str(params): params = self.date_parse_changer(params)
+        # Replace $current_date in data, json_body and params
+        if "$current_date" in str(data):
+            data = self.date_parse_changer(data)
+        if "$current_date" in str(json_body):
+            json_body = self.date_parse_changer(json_body)
+        if "$current_date" in str(params):
+            params = self.date_parse_changer(params)
 
         if not step.get("body_values"):
-            # Return as a generator yielding one response object
-            yield self.execute_request(method, url, headers, params, data, json_body, ssl_verify)
-            return
+            return self.execute_request(method, url, headers, params, data, json_body)
 
-        # Handle multiplexed requests (multiplexing is natively supported by the session we created)
-        # We'll still process them and yield responses as they come
-        body_values = step["body_values"]
-        keys, values = list(body_values.keys()), list(body_values.values())
+        # Process multiple body values
+        responses = []
+        to_perform_requests = []
+
+        body_values: dict = step["body_values"]
+        keys = list(body_values.keys())
+        values = list(body_values.values())
+
         for combination in itertools.product(*values):
-            t_json = json.dumps(json_body)
-            t_data = json.dumps(data)
-            t_params = json.dumps(params)
-            for k, v in zip(keys, combination):
-                t_json = t_json.replace(k, v)
-                t_data = t_data.replace(k, v)
-                t_params = t_params.replace(k, v)
-            
-            p_json = json.loads(t_json) if t_json not in ("None", "", "{}") else None
-            p_data = json.loads(t_data) if t_data not in ("None", "", "{}") else None
-            p_params = json.loads(t_params) if t_params not in ("None", "", "{}") else None
-            
-            yield self.execute_request(method, url, headers, p_params, p_data, p_json, ssl_verify)
 
-    def execute_workflow(self) -> Generator[niquests.Response, None, None]:
+            temp_json_body = json.dumps(json_body)
+            temp_data = json.dumps(data)
+            temp_params = json.dumps(params)
+
+            # Replace placeholders
+            for key, val in zip(keys, combination):
+                temp_json_body = temp_json_body.replace(key, val)
+                temp_data = temp_data.replace(key, val)
+                temp_params_ = temp_params.replace(key, val)
+
+            # Pick the non-empty JSON
+            if temp_json_body not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_json_body))
+
+            elif temp_data not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_data))
+
+            elif temp_params_ not in (None, "", "{}"):
+                to_perform_requests.append(json.loads(temp_params_))
+
+        # Making use of niquests multiplexed feature.
+        with niquests.Session(multiplexed=True) as s:
+            for to_perform_request in to_perform_requests:
+                response_ = s.request(
+                    method=method,
+                    url=url,
+                    headers=headers if headers else None,
+                    params=to_perform_request if params else None,
+                    data=to_perform_request if data else None,
+                    json=to_perform_request if json_body else None,
+                    verify=ssl_verify,
+                )
+                print(response_.url)
+                responses.append(response_)
+
+        if not step.get("key_to_add_to_data"):
+            return {"values_based_response": [r.json() for r in responses]}
+        else:
+            return {
+                "values_based_response": [
+                    {**r.json(), "static_value": new_key}
+                    for r, new_key in zip(
+                        responses, step["body_values"][step["key_to_add_to_data"]]
+                    )
+                ]
+            }
+
+    def execute_workflow(self) -> Union[dict, List[dict]]:
+        """
+        Execute the entire configured API workflow step-by-step.
+
+        Iterates through the `config` list and executes each step in sequence.
+
+        Returns:
+            (Union[dict, List[dict]]): Result of the final API call.
+        """
         for step in self.config:
             if step["type"] == "TOKEN":
                 self.fetch_token(step)
             else:
-                yield from self.make_request(step)
+                return self.make_request(step)
+
 
 class APIExtractor:
-    def __init__(self, pre_ingestion_logs: list[logDataAcquisitionDetail], inbound_location, 
-                 outbound_source_file_format, file_pattern, pre_ingestion_dataset_id, 
-                 outbound_file_delimiter, process_id):
-        
-        file_pattern = file_pattern.split(".")[0] if "." in file_pattern else file_pattern
-        pre_ingestion_paths = [x.inbound_file_location for x in pre_ingestion_logs]
-        
-        try: Path(inbound_location).mkdir(parents=True, exist_ok=True)
-        except: pass
+    def __init__(
+        self,
+        pre_ingestion_logs: list[logDataAcquisitionDetail],
+        inbound_location: str,
+        outbound_source_file_format: str,
+        file_pattern: str,
+        pre_ingestion_dataset_id: int,
+        outbound_file_delimiter: str,
+        process_id: int,
+    ):
+        file_pattern = (
+            file_pattern.split(".")[0] if "." in file_pattern else file_pattern
+        )
 
-        save_name = FileNameGenerator.file_name_generator(file_pattern)
-        file_path = f"{inbound_location}{save_name}.{outbound_source_file_format}"
-
-        if file_path in pre_ingestion_paths:
-            raise Exception(f"{file_path} is already moved to Inbound Location.")
-
-        start_time = datetime.now()
-        batch_id = int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:-1])
-
-        with OrchestrationProcess.OrchestrationProcess() as orch:
-            column_meta = orch.get_ctl_column_metadata(dataset_id=pre_ingestion_dataset_id)
-            api_conn_dtls = orch.get_ctl_api_connection_details(dataset_id=pre_ingestion_dataset_id)
-        
-        json_mapping = {x.source_column_name: x.column_json_mapping for x in column_meta}
-        config = []
-        for dt in api_conn_dtls:
-            temp = {"method": dt.method, "type": dt.type, "ssl_verify": (dt.ssl_verify == "Y")}
-            if dt.type == "TOKEN":
-                temp.update({"token_url": dt.token_url, "auth_type": dt.auth_type, "token_type": dt.token_type, "token_path": dt.token_path})
-                if dt.client_id: temp["client_id"] = dt.client_id
-                if dt.client_secret: temp["client_secret"] = dt.client_secret
-                if dt.username: temp["username"] = dt.username
-                if dt.password: temp["password"] = dt.password
-                if dt.issuer: temp["issuer"] = dt.issuer
-                if dt.scope: temp["scope"] = dt.scope
-                if dt.private_key: temp["private_key"] = dt.private_key
-            else:
-                temp["url"] = dt.url
-                if dt.headers: temp["headers"] = json_loads(dt.headers)
-                if dt.params: temp["params"] = json_loads(dt.params)
-                if dt.data: temp["data"] = json_loads(dt.data)
-                if dt.json_body: temp["json_body"] = json_loads(dt.json_body)
-                if dt.body_values: temp["body_values"] = json_loads(dt.body_values)
-                if dt.key_to_add_to_data: temp["key_to_add_to_data"] = dt.key_to_add_to_data
-            config.append(temp)
+        pre_ingestion_processed_files = [
+            x.inbound_file_location for x in pre_ingestion_logs
+        ]
 
         try:
-            automation = APIAutomation(config=config)
-            with open(file_path, mode="w", newline="", encoding="utf-8") as file:
-                writer = csv.DictWriter(file, fieldnames=[x.source_column_name for x in column_meta], 
-                                         delimiter=outbound_file_delimiter)
-                writer.writeheader()
-                
-                # Streaming extraction to JsonDataMapper
-                for response in automation.execute_workflow():
-                    raw_data = response.json()
-                    # If the response is a list, we pass each item; if it's a dict, we pass as is
-                    if isinstance(raw_data, list):
-                        for item in raw_data:
-                            mapped = JsonDataMapper.JsonDataMapper(mapping=json_mapping, json_data=item).get_mapped_data()
-                            writer.writerows(mapped)
-                    else:
-                        mapped = JsonDataMapper.JsonDataMapper(mapping=json_mapping, json_data=raw_data).get_mapped_data()
-                        writer.writerows(mapped)
+            Path(inbound_location).mkdir(parents=True)
+        except:
+            pass
 
-            with OrchestrationProcess.OrchestrationProcess() as orch:
-                orch.insert_log_data_acquisition_detail(log_data_acquisition=logDataAcquisitionDetail(
-                    batch_id=batch_id, run_date=start_time.date(), process_id=process_id,
-                    pre_ingestion_dataset_id=pre_ingestion_dataset_id, outbound_source_location="API",
-                    inbound_file_location=file_path, status=Constants.STATUS_SUCCEEDED,
-                    start_time=start_time, end_time=datetime.now()
-                ))
-        except Exception as e:
-            with OrchestrationProcess.OrchestrationProcess() as orch:
-                orch.insert_log_data_acquisition_detail(log_data_acquisition=logDataAcquisitionDetail(
-                    batch_id=batch_id, run_date=start_time.date(), process_id=process_id,
-                    pre_ingestion_dataset_id=pre_ingestion_dataset_id, outbound_source_location="API",
-                    inbound_file_location=None, status=Constants.STATUS_FAILED,
-                    exception_details=traceback.format_exc(), start_time=start_time, end_time=datetime.now()
-                ))
-            raise
+        save_file_name = FileNameGenerator.file_name_generator(file_pattern)
+        file_save_name = (
+            f"{inbound_location}{save_file_name}.{outbound_source_file_format}"
+        )
+
+        if file_save_name not in pre_ingestion_processed_files:
+            start_time = datetime.now()
+            batch_id = int(datetime.now().strftime("%Y%m%d%H%M%S%f")[:-1])
+
+            with OrchestrationProcess.OrchestrationProcess() as orch_process:
+                column_meta_data = orch_process.get_ctl_column_metadata(
+                    dataset_id=pre_ingestion_dataset_id
+                )
+
+                api_connection_dtls = orch_process.get_ctl_api_connection_details(
+                    dataset_id=pre_ingestion_dataset_id
+                )
+            json_mapping = {
+                x.source_column_name: x.column_json_mapping for x in column_meta_data
+            }
+
+            config = list()
+
+            for api_connection_dtl in api_connection_dtls:
+                temp_dict = dict()
+                temp_dict["method"] = api_connection_dtl.method
+                temp_dict["type"] = api_connection_dtl.type
+                temp_dict["ssl_verify"] = (
+                    True if api_connection_dtl.ssl_verify == "Y" else False
+                )
+
+                if api_connection_dtl.type == "TOKEN":
+                    temp_dict["token_url"] = api_connection_dtl.token_url
+                    temp_dict["auth_type"] = api_connection_dtl.auth_type
+                    temp_dict["token_type"] = api_connection_dtl.token_type
+                    temp_dict["token_path"] = api_connection_dtl.token_path
+
+                    if api_connection_dtl.client_id is not None:
+                        temp_dict["client_id"] = api_connection_dtl.client_id
+                    if api_connection_dtl.client_secret is not None:
+                        temp_dict["client_secret"] = api_connection_dtl.client_secret
+
+                    if api_connection_dtl.username is not None:
+                        temp_dict["username"] = api_connection_dtl.username
+                    if api_connection_dtl.password is not None:
+                        temp_dict["password"] = api_connection_dtl.password
+
+                    if api_connection_dtl.issuer is not None:
+                        temp_dict["issuer"] = api_connection_dtl.issuer
+                    if api_connection_dtl.scope is not None:
+                        temp_dict["scope"] = api_connection_dtl.scope
+                    if api_connection_dtl.private_key is not None:
+                        temp_dict["private_key"] = api_connection_dtl.private_key
+
+                else:
+                    temp_dict["url"] = api_connection_dtl.url
+
+                    if (
+                        api_connection_dtl.headers is not None
+                        and api_connection_dtl.headers != ""
+                    ):
+                        temp_dict["headers"] = json_loads(api_connection_dtl.headers)
+
+                    if (
+                        api_connection_dtl.params is not None
+                        and api_connection_dtl.params != ""
+                    ):
+                        temp_dict["params"] = json_loads(api_connection_dtl.params)
+
+                    if (
+                        api_connection_dtl.data is not None
+                        and api_connection_dtl.data != ""
+                    ):
+                        temp_dict["data"] = json_loads(api_connection_dtl.data)
+
+                    if (
+                        api_connection_dtl.json_body is not None
+                        and api_connection_dtl.json_body != ""
+                    ):
+                        temp_dict["json_body"] = json_loads(
+                            api_connection_dtl.json_body
+                        )
+
+                    if (
+                        api_connection_dtl.body_values is not None
+                        and api_connection_dtl.body_values != ""
+                    ):
+                        temp_dict["body_values"] = json_loads(
+                            api_connection_dtl.body_values
+                        )
+                    if (
+                        api_connection_dtl.key_to_add_to_data is not None
+                        and api_connection_dtl.key_to_add_to_data != ""
+                    ):
+                        temp_dict["key_to_add_to_data"] = (
+                            api_connection_dtl.key_to_add_to_data
+                        )
+
+                config.append(temp_dict)
+
+            try:
+                api_response = APIAutomation(config=config).execute_workflow()
+                if not api_response.get("values_based_response"):
+                    mapped_data = JsonDataMapper.JsonDataMapper(
+                        mapping=json_mapping, json_data=api_response
+                    ).get_mapped_data()
+                else:
+                    final_results = list()
+
+                    for response in api_response.get("values_based_response"):
+                        print(response)
+                        mapped_data = JsonDataMapper.JsonDataMapper(
+                            mapping=json_mapping,
+                            json_data=response,
+                        ).get_mapped_data()
+
+                        final_results.extend(mapped_data)
+                    mapped_data = final_results
+
+                with open(file_save_name, mode="w", newline="") as file:
+                    writer = csv.DictWriter(
+                        file,
+                        fieldnames=[x.source_column_name for x in column_meta_data],
+                        delimiter=outbound_file_delimiter,
+                    )
+                    writer.writeheader()
+                    writer.writerows(mapped_data)
+
+                with OrchestrationProcess.OrchestrationProcess() as orch_process:
+                    orch_process.insert_log_data_acquisition_detail(
+                        log_data_acquisition=logDataAcquisitionDetail(
+                            batch_id=batch_id,
+                            run_date=start_time.date(),
+                            process_id=process_id,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            outbound_source_location="API",
+                            inbound_file_location=file_save_name,
+                            status="SUCCEEDED",
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
+                    )
+            except Exception as e:
+                with OrchestrationProcess.OrchestrationProcess() as orch_process:
+                    orch_process.insert_log_data_acquisition_detail(
+                        log_data_acquisition=logDataAcquisitionDetail(
+                            batch_id=batch_id,
+                            run_date=start_time.date(),
+                            process_id=process_id,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            outbound_source_location="API",
+                            inbound_file_location=None,
+                            exception_details=traceback.format_exc(),
+                            status="FAILED",
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
+                    )
+                raise
+        else:
+            raise Exception(f"{file_save_name} Is Already Moved to Inbound Location.")

@@ -111,8 +111,8 @@ class DataStandardization:
         """
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             for file in files:
-                orch_process.insert_log_data_acquisition_detail(
-                    log_data_acquisition=logDataStandardisationDtl(
+                orch_process.insert_data_standardisation_log(
+                    log_data_standardisation=logDataStandardisationDtl(
                         batch_id=file.batch_id,
                         process_id=self.process_id,
                         dataset_id=self.dataset_id,
