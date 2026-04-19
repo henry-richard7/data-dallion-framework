@@ -90,33 +90,35 @@ class S3Extractor:
                                 OrchestrationProcess.OrchestrationProcess() as orch_process
                             ):
                                 orch_process.insert_log_data_acquisition_detail(
-                                log_data_acquisition=logDataAcquisitionDetail(
-                                batch_id=batch_id,
-                                run_date=start_time.date(),
-                                process_id=process_id,
-                                pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                                outbound_source_location="S3",
-                                inbound_file_location=file_save_name,
-                                status="SUCCEEDED",
-                                start_time=start_time,
-                                end_time=datetime.now())
-                            )
+                                    log_data_acquisition=logDataAcquisitionDetail(
+                                        batch_id=batch_id,
+                                        run_date=start_time.date(),
+                                        process_id=process_id,
+                                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                                        outbound_source_location="S3",
+                                        inbound_file_location=file_save_name,
+                                        status="SUCCEEDED",
+                                        start_time=start_time,
+                                        end_time=datetime.now(),
+                                    )
+                                )
                         except Exception as e:
                             with (
                                 OrchestrationProcess.OrchestrationProcess() as orch_process
                             ):
                                 orch_process.insert_log_data_acquisition_detail(
-                                log_data_acquisition=logDataAcquisitionDetail(
-                                batch_id=batch_id,
-                                run_date=start_time.date(),
-                                process_id=process_id,
-                                pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                                outbound_source_location="S3",
-                                inbound_file_location=None,
-                                exception_details=traceback.format_exc(),
-                                status="FAILED",
-                                start_time=start_time,
-                                end_time=datetime.now())
+                                    log_data_acquisition=logDataAcquisitionDetail(
+                                        batch_id=batch_id,
+                                        run_date=start_time.date(),
+                                        process_id=process_id,
+                                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                                        outbound_source_location="S3",
+                                        inbound_file_location=None,
+                                        exception_details=traceback.format_exc(),
+                                        status="FAILED",
+                                        start_time=start_time,
+                                        end_time=datetime.now(),
+                                    )
                                 )
                                 raise
 

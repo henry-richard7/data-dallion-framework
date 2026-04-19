@@ -1,3 +1,5 @@
+import traceback
+
 from data_dallion_framework.Common import OrchestrationProcess, FileNameGenerator
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
@@ -123,30 +125,34 @@ class SalesforceExtractor:
 
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(
-                        batch_id=batch_id,
-                        process_id=process_id,
-                        run_date=datetime.now().date(),
-                        outbound_source_location="API",
-                        inbound_file_location=file_save_name,
-                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                        status="SUCCEEDED",
-                        start_time=start_time,
-                        end_time=datetime.now(),
+                        log_data_acquisition=logDataAcquisitionDetail(
+                            batch_id=batch_id,
+                            process_id=process_id,
+                            run_date=datetime.now().date(),
+                            outbound_source_location="SALESFORCE/VEEVA",
+                            inbound_file_location=file_save_name,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            status="SUCCEEDED",
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
                     )
 
             except Exception as e:
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(
-                        batch_id=batch_id,
-                        process_id=process_id,
-                        run_date=datetime.now().date(),
-                        outbound_source_location="API",
-                        inbound_file_location=file_save_name,
-                        pre_ingestion_dataset_id=pre_ingestion_dataset_id,
-                        status="FAILED",
-                        exception_details=str(e),
-                        start_time=start_time,
-                        end_time=datetime.now(),
+                        log_data_acquisition=logDataAcquisitionDetail(
+                            batch_id=batch_id,
+                            process_id=process_id,
+                            run_date=datetime.now().date(),
+                            outbound_source_location="SALESFORCE/VEEVA",
+                            inbound_file_location=file_save_name,
+                            pre_ingestion_dataset_id=pre_ingestion_dataset_id,
+                            status="FAILED",
+                            exception_details=traceback.format_exc(),
+                            start_time=start_time,
+                            end_time=datetime.now(),
+                        )
                     )
                 raise
         else:
