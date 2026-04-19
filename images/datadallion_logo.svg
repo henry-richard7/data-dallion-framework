@@ -1,0 +1,46 @@
+<svg width="100%" viewBox="0 0 680 415" role="img" style="" xmlns="http://www.w3.org/2000/svg">
+  <title style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">DataDallion Framework Logo</title>
+  <desc style="fill:rgb(0, 0, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto">Three stacked pyramid layers labeled Bronze, Silver, and Gold representing the Medallion Architecture data pipeline, with the DataDallion Framework wordmark below</desc>
+
+  
+
+  <!-- Gold layer (top, narrowest) -->
+  <rect x="250" y="92" width="180" height="56" rx="10" fill="#D4AF37" stroke="#B8921E" stroke-width="0.5" style="fill:rgb(212, 175, 55);stroke:rgb(184, 146, 30);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="340" y="126" text-anchor="middle" font-size="15" fill="#3D2800" style="fill:rgb(61, 40, 0);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:15px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Gold</text>
+
+  <!-- Small label: curated -->
+  <text x="430" y="126" text-anchor="start" font-size="10" dx="10" style="fill:rgb(194, 192, 182);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">curated</text>
+
+  <!-- Up arrow — Silver to Gold -->
+  <polygon points="333,163 347,163 340,151" fill="#AAAAAA" style="fill:rgb(170, 170, 170);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Silver layer (middle) -->
+  <rect x="220" y="165" width="240" height="56" rx="10" fill="#9EA2A8" stroke="#7A7E83" stroke-width="0.5" style="fill:rgb(158, 162, 168);stroke:rgb(122, 126, 131);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="340" y="199" text-anchor="middle" font-size="15" fill="#FFFFFF" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:15px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Silver</text>
+  <text x="460" y="199" text-anchor="start" font-size="10" dx="4" style="fill:rgb(194, 192, 182);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">standardised</text>
+
+  <!-- Up arrow — Bronze to Silver -->
+  <polygon points="333,235 347,235 340,223" fill="#AAAAAA" style="fill:rgb(170, 170, 170);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Bronze layer (bottom, widest) -->
+  <rect x="190" y="237" width="300" height="56" rx="10" fill="#CD7F32" stroke="#A8621A" stroke-width="0.5" style="fill:rgb(205, 127, 50);stroke:rgb(168, 98, 26);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <text x="340" y="271" text-anchor="middle" font-size="15" fill="#FFFFFF" style="fill:rgb(255, 255, 255);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:15px;font-weight:500;text-anchor:middle;dominant-baseline:auto">Bronze</text>
+  <text x="490" y="271" text-anchor="start" font-size="10" dx="4" style="fill:rgb(194, 192, 182);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:10px;font-weight:400;text-anchor:start;dominant-baseline:auto">raw</text>
+
+  <!-- Thin data-flow spine on left -->
+  <line x1="186" y1="92" x2="186" y2="293" stroke="#CCCCCC" stroke-width="1" stroke-dasharray="4,4" opacity="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(204, 204, 204);color:rgb(255, 255, 255);stroke-width:1px;stroke-dasharray:4px, 4px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <!-- Horizontal ticks on spine -->
+  <line x1="183" y1="120" x2="189" y2="120" stroke="#CCCCCC" stroke-width="1" opacity="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(204, 204, 204);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="183" y1="193" x2="189" y2="193" stroke="#CCCCCC" stroke-width="1" opacity="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(204, 204, 204);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+  <line x1="183" y1="265" x2="189" y2="265" stroke="#CCCCCC" stroke-width="1" opacity="0.5" style="fill:rgb(0, 0, 0);stroke:rgb(204, 204, 204);color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:0.5;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Wordmark -->
+  <text x="340" y="345" text-anchor="middle" font-size="32" font-weight="500" style="fill:rgb(250, 249, 245);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:32px;font-weight:500;text-anchor:middle;dominant-baseline:auto">DataDallion</text>
+  <text x="340" y="374" text-anchor="middle" font-size="17" style="fill:rgb(194, 192, 182);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:17px;font-weight:400;text-anchor:middle;dominant-baseline:auto">Framework</text>
+
+  <!-- Thin rule -->
+  <line x1="240" y1="388" x2="440" y2="388" stroke="var(--color-border-tertiary)" stroke-width="0.5" style="fill:rgb(0, 0, 0);stroke:rgba(222, 220, 209, 0.15);color:rgb(255, 255, 255);stroke-width:0.5px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;font-size:16px;font-weight:400;text-anchor:start;dominant-baseline:auto"/>
+
+  <!-- Tagline -->
+  <text x="340" y="407" text-anchor="middle" font-size="11" style="fill:rgb(194, 192, 182);stroke:none;color:rgb(255, 255, 255);stroke-width:1px;stroke-linecap:butt;stroke-linejoin:miter;opacity:1;font-family:&quot;Anthropic Sans&quot;, sans-serif;font-size:11px;font-weight:400;text-anchor:middle;dominant-baseline:auto">Medallion Architecture · Data Pipelines</text>
+</svg>
