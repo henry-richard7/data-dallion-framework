@@ -1,6 +1,6 @@
 [project]
 name = "data-dallion-framework"
-version = "1.0.7"
+version = "1.0.9rc1"
 description = "DataDallion Framework is a comprehensive metadata-driven data engineering framework for building and orchestrating Medallion Architecture data pipelines (Bronze -> Silver -> Gold layers). It provides an end-to-end solution for data ingestion, standardization, quality management, and transformation with support for multiple data sources and automated orchestration."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -25,7 +25,7 @@ extras = [
     "delta-spark"
 ]
 sql-backend = [
-    "mariadb>=1.1.14",
+    "pymysql>=1.1.2",
 ]
 
 [build-system]

@@ -12,7 +12,7 @@ from pyspark.sql.functions import (
     lower,
     lit,
 )
-from data_dallion_framework.Common import OrchestrationProcess
+from data_dallion_framework.Common import OrchestrationProcess, Constants
 from data_dallion_framework.Common.Models.Logs import logDataStandardisationDtl
 from data_dallion_framework.Common.Models.DataStandardisation import (
     ctlDataStandardisationDtl,
@@ -38,7 +38,7 @@ class DataStandardization:
         self.dataset_id = dataset_id
         self.landing_location = landing_location
         self.data_standardisation_location = data_standardisation_location
-        self.partition_columns = data_standardisation_partition_columns
+        self.partition_columns = data_standardisation_partition_columns.split(",") if data_standardisation_partition_columns else []
         self.table_location_type = table_location_type
         self.env = env
         self.landing_table_name = landing_table_name
@@ -105,36 +105,35 @@ class DataStandardization:
 
         return transformations
 
-    def write_and_log(
-        self, batch_id, start_datetime, source_file, status, exception_details=None
-    ):
+    def write_and_log_batch(self, files: list, status, start_time, exception_details=None):
         """
-        Writes DataFrame to Delta format and logs process details.
+        Logs status for multiple files in a single pass.
         """
-
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
-            orch_process.insert_log_data_acquisition_detail(
-                log_data_acquisition=logDataStandardisationDtl(
-                    batch_id=batch_id,
-                    process_id=self.process_id,
-                    dataset_id=self.dataset_id,
-                    source_file=source_file,
-                    data_standardisation_location=self.data_standardisation_location,
-                    status=status,
-                    start_datetime=start_datetime,
-                    end_datetime=datetime.now(),
-                    exception_details=exception_details,
+            for file in files:
+                orch_process.insert_data_standardisation_log(
+                    log_data_standardisation=logDataStandardisationDtl(
+                        batch_id=file.batch_id,
+                        process_id=self.process_id,
+                        dataset_id=self.dataset_id,
+                        source_file=file.source_file,
+                        data_standardisation_location=self.data_standardisation_location,
+                        status=status,
+                        start_datetime=start_time,
+                        end_datetime=datetime.now(),
+                        exception_details=exception_details,
+                    )
                 )
-            )
 
     def run_standardization(self):
         """
         Main execution method:
         - Fetches unprocessed files and transformation rules
-        - Reads data
+        - Reads data in bulk
         - Applies transformations in a single Spark plan
         - Writes output and logs status
         """
+        start_time = datetime.now()
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             unprocessed_files = orch_process.get_data_standardisation_unprocessed_files(
                 process_id=self.process_id, dataset_id=self.dataset_id
@@ -146,69 +145,56 @@ class DataStandardization:
                 dataset_id=self.dataset_id
             )
 
+        if not unprocessed_files:
+            return
+
         source_column_names = [x.source_column_name for x in column_meta_data_details]
         target_column_names = [x.column_name for x in column_meta_data_details]
+        batch_ids = [f.batch_id for f in unprocessed_files]
 
-        if not unprocessed_files:
-            self.write_and_log(
-                None,
-                datetime.now(),
-                None,
-                "FAILED",
-                f"Data Standardisation is already processed for Dataset ID {self.dataset_id}.",
-            )
-            raise Exception(
-                f"Data Standardisation is already processed for Dataset ID {self.dataset_id}."
-            )
-
-        for file in unprocessed_files:
-            start_time = datetime.now()
-            try:
-                if self.table_location_type.lower() == "external":
-                    df = (
-                        self.spark.read.format("delta")
-                        .load(self.landing_location)
-                        .filter(col("batch_id") == file.batch_id)
-                    )
-                else:
-                    df = self.spark.read.table(f"{self.env}.{self.landing_table_name}")
-
-                df = df.drop("batch_id")
-                # Rename columns all at once if counts match
-                if df.columns == source_column_names:
-                    df = df.toDF(*target_column_names)
-
-                    # Build transformations
-                    transformations = self.build_column_transformations(
-                        df, data_standards
-                    )
-
-                    # Apply transformations with ALIAS to preserve schema compatibility
-                    df = df.select([transformations[c].alias(c) for c in df.columns])
-
-                    # Add batch_id column
-                    df = df.withColumn("batch_id", lit(file.batch_id))
-
-                    df.write.format("delta").mode("append").partitionBy(
-                        self.partition_columns
-                    ).save(self.data_standardisation_location)
-
-                    # Write output and log success
-                    self.write_and_log(
-                        file.batch_id, start_time, file.source_file, "SUCCEEDED"
-                    )
-                else:
-                    raise Exception(
-                        f"Column header mismatch: expected {source_column_names} columns, found {df.columns} in source."
-                    )
-
-            except Exception as e:
-                # Write empty dataframe & log failure (schema-safe if df exists)
-                self.write_and_log(
-                    file.batch_id,
-                    start_time,
-                    file.source_file,
-                    "FAILED",
-                    str(e),
+        try:
+            # Optimization: Bulk read all pending batches
+            if self.table_location_type.lower() == Constants.TABLE_TYPE_EXTERNAL:
+                df = (
+                    self.spark.read.format("delta")
+                    .load(self.landing_location)
+                    .filter(col("batch_id").isin(batch_ids))
                 )
-                raise
+            else:
+                df = self.spark.read.table(f"{self.env}.{self.landing_table_name}").filter(col("batch_id").isin(batch_ids))
+
+            # Strictly check that the input columns (minus batch_id) match expectations
+            input_cols = [c for c in df.columns if c != "batch_id"]
+            if sorted(input_cols) == sorted(source_column_names):
+                # Ensure correct column order for rename
+                df_data = df.select(*source_column_names, "batch_id")
+                
+                # Rename columns
+                for old, new in zip(source_column_names, target_column_names):
+                    df_data = df_data.withColumnRenamed(old, new)
+
+                # Build transformations
+                transformations = self.build_column_transformations(df_data, data_standards)
+
+                # Apply transformations in a single Spark plan
+                # Preserve 'batch_id'
+                final_cols = [transformations[c].alias(c) for c in target_column_names] + [col("batch_id")]
+                df_data = df_data.select(*final_cols)
+
+                # Batch write
+                df_data.write.format("delta").mode("append").partitionBy(
+                    self.partition_columns or ["batch_id"]
+                ).save(self.data_standardisation_location)
+
+                # Log success for all batches
+                self.write_and_log_batch(unprocessed_files, Constants.STATUS_SUCCEEDED, start_time)
+            
+            else:
+                raise Exception(
+                    f"Column header mismatch in batch: expected {source_column_names}, found {input_cols}."
+                )
+
+        except Exception as e:
+            # Log failure for all batches
+            self.write_and_log_batch(unprocessed_files, Constants.STATUS_FAILED, start_time, str(e))
+            raise

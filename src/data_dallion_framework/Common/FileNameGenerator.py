@@ -28,17 +28,12 @@ def file_name_generator(save_file_name: str) -> str:
     today_date = datetime.now()
 
     if "YYYYMMDD" in save_file_name:
-        save_file_name = save_file_name.replace(
-            "YYYYMMDD", today_date.strftime("%Y%m%d")
-        )
-    elif "YYYYMM" in save_file_name:
-        save_file_name = save_file_name.replace(
-            "YYYYMM",
-            today_date.strftime("%Y%m"),
-        )
-    elif "YYYY" in save_file_name:
-        save_file_name = save_file_name.replace("YYYY", today_date.strftime("%Y"))
-    else:
-        save_file_name = save_file_name
+        return save_file_name.replace("YYYYMMDD", today_date.strftime("%Y%m%d"))
+
+    if "YYYYMM" in save_file_name:
+        return save_file_name.replace("YYYYMM", today_date.strftime("%Y%m"))
+
+    if "YYYY" in save_file_name:
+        return save_file_name.replace("YYYY", today_date.strftime("%Y"))
 
     return save_file_name

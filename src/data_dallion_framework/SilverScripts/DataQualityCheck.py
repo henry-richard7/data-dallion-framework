@@ -1,9 +1,8 @@
 # optimized_dqm_check.py
 from datetime import datetime
-from pyspark.sql import DataFrame, SparkSession
-from pyspark.sql.functions import col, lit, length, concat_ws
+from pyspark.sql import DataFrame, SparkSession, functions as F
 from ast import literal_eval
-from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats
+from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats, Constants
 from data_dallion_framework.Common.Models import Logs, DqmMaster
 
 
@@ -37,6 +36,7 @@ class DataQualityCheck:
         self.env = env
         self.staging_table_name = staging_table_name
         self.publish_table_name = publish_table_name
+        self.log_buffer = []
 
         with OrchestrationProcess.OrchestrationProcess() as orch:
             self.dqm_unprocessed_files = orch.get_dqm_unprocessed_files(
@@ -44,264 +44,235 @@ class DataQualityCheck:
             )
             self.dqm_masters = orch.get_dqm_detail(process_id, dataset_id)
 
-        self.qc_type_to_function = {
-            "Null": self.null_check,
-            "Length": self.length_check,
-            "Length-Range": self.length_range_check,
-            "Date": self.date_check,
-            "Integer": self.integer_check,
-            "Decimal": self.decimal_check,
-            "Regex": self.regex_check,
-            "Domain": self.domain_check,
-            "Custom": self.custom_check,
-            "Unique": self.unique_check,
-            "Blank": self.blank_check,
-        }
-
         if self.dqm_masters:
             self.start_dqm_check()
         else:
             self.handle_no_dqm_masters()
 
-    def apply_qc_filter(self, df: DataFrame, qc_filter):
-        return df.filter(" AND ".join(qc_filter.split(","))) if qc_filter else df
+    def get_qc_condition(self, dqm: DqmMaster.ctlDqmMasterDtl):
+        """Map DQM master rule to a Spark SQL condition string."""
+        tp = dqm.qc_type
+        col_name = dqm.column_name
+        param = dqm.qc_param
 
-    def calculate_metrics(self, input_df: DataFrame, passed_df, total):
-        failed = total - passed_df.count()
-        return failed, (failed / total) * 100 if total else 0
-
-    # def write_failed(self, input_df: DataFrame, passed_df, column, check_type, path):
-    #     failed = (
-    #         input_df.subtract(passed_df)
-    #         .withColumn("dqm_check_type", lit(check_type))
-    #         .withColumn("failed_column_name", lit(column))
-    #         .withColumn("fail_value", col(column))
-    #         .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
-    #     )
-
-    #     failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
-
-    def write_failed(self, input_df, passed_df, column, check_type, path):
-        failed = (
-            input_df.subtract(passed_df)
-            .withColumn("dqm_check_type", lit(check_type))
-            .withColumn("failed_column_name", lit(column))
-        )
-
-        # Handle multi-column case (Unique checks)
-        if "," in column:
-            cols = column.split(",")
-            failed = failed.withColumn(
-                "fail_value", concat_ws("|", *[col(c) for c in cols])
-            )
-        else:
-            failed = failed.withColumn("fail_value", col(column))
-
-        failed = failed.select(
-            "dqm_check_type", "failed_column_name", "fail_value", "batch_id"
-        )
-
-        failed.write.format("delta").mode("append").partitionBy("batch_id").save(path)
-
-    def _prepare_result(self, df, fail_count, fail_pct, threshold):
-        return {
-            "df": None if fail_pct >= threshold else df,
-            "error_count": fail_count,
-            "error_percentage": fail_pct,
-            "success": fail_pct < threshold,
-        }
-
-    def null_check(self, df, **kwargs):
-        col_name = kwargs["column_name"]
-        df_valid = df.filter(col(col_name).isNotNull())
-        return self._run_check(df, df_valid, col_name, "NULL", **kwargs)
-
-    def length_check(self, df, **kwargs):
-        col_name, param = kwargs["column_name"], kwargs["qc_param"]
-        op = "".join([c for c in param if not c.isdigit()])
-        val = int("".join([c for c in param if c.isdigit()]))
-        ops = {">=": "ge", "<=": "le", ">": "gt", "<": "lt", "=": "eq", "!=": "ne"}
-        df_valid = df.filter(getattr(length(col(col_name)), ops[op])(val))
-        return self._run_check(df, df_valid, col_name, "LENGTH", **kwargs)
-
-    def length_range_check(self, df: DataFrame, **kwargs):
-        col_name = kwargs["column_name"]
-        r = literal_eval(kwargs["qc_param"])
-        df_valid = df.filter(length(col(col_name)).between(min(r), max(r)))
-        return self._run_check(df, df_valid, col_name, "LENGTH-RANGE", **kwargs)
-
-    def date_check(self, df: DataFrame, **kwargs):
-        regex = RegexDateFormats.get_date_regex(qc_param=kwargs["qc_param"])
-        df_valid = df.filter(col(kwargs["column_name"]).rlike(regex))
-        return self._run_check(df, df_valid, kwargs["column_name"], "DATE", **kwargs)
-
-    def integer_check(self, df: DataFrame, **kwargs):
-        df_valid = df.filter(col(kwargs["column_name"]).rlike(r"^-?\d+$"))
-        return self._run_check(df, df_valid, kwargs["column_name"], "INTEGER", **kwargs)
-
-    def decimal_check(self, df: DataFrame, **kwargs):
-        df_valid = df.filter(
-            col(kwargs["column_name"]).rlike(r"^-?(\d+\.\d+|\d+|\.\d+)$")
-        )
-        return self._run_check(df, df_valid, kwargs["column_name"], "DECIMAL", **kwargs)
-
-    def regex_check(self, df: DataFrame, **kwargs):
-        df_valid = df.filter(col(kwargs["column_name"]).rlike(kwargs["qc_param"]))
-        return self._run_check(df, df_valid, kwargs["column_name"], "REGEX", **kwargs)
-
-    def domain_check(self, df: DataFrame, **kwargs):
-        values = kwargs["qc_param"].split(",")
-        df_valid = df.filter(col(kwargs["column_name"]).isin(values))
-        return self._run_check(df, df_valid, kwargs["column_name"], "DOMAIN", **kwargs)
-
-    def custom_check(self, df, **kwargs):
-        self.spark.sql(
-            f"CREATE OR REPLACE TEMP VIEW table_{kwargs['qc_id']} AS SELECT * FROM df"
-        )
-        df_valid = self.spark.sql(kwargs["qc_param"])
-        return self._run_check(df, df_valid, "", "CUSTOM", **kwargs)
-
-    def unique_check(self, df: DataFrame, **kwargs):
-        cols = kwargs["column_name"].split(",")
-        df_valid = df.dropDuplicates(cols)
-        return self._run_check(df, df_valid, kwargs["column_name"], "UNIQUE", **kwargs)
-
-    def blank_check(self, df, **kwargs):
-        df = self.apply_qc_filter(df, kwargs.get("qc_filter"))
-        return {
-            "df": None if df.isEmpty() else df,
-            "error_count": None if df.isEmpty() else 0,
-            "error_percentage": 100 if df.isEmpty() else 0,
-            "success": False,
-        }
-
-    def _run_check(self, df, df_valid, column, check_type, **kwargs):
-        df_valid = self.apply_qc_filter(df_valid, kwargs.get("qc_filter"))
-        fail_count, fail_pct = self.calculate_metrics(
-            df, df_valid, kwargs["total_count"]
-        )
-        if fail_count:
-            self.write_failed(df, df_valid, column, check_type, kwargs["failure_path"])
-        return self._prepare_result(
-            df_valid, fail_count, fail_pct, kwargs["error_threshold"]
-        )
-
-    def log_result(
-        self,
-        resp,
-        dqm: DqmMaster.ctlDqmMasterDtl,
-        log: Logs.logDqmDtl,
-        batch_id,
-        start_time,
-    ):
-        with OrchestrationProcess.OrchestrationProcess() as orch:
-            status = (
-                "SUCCEEDED"
-                if resp["success"]
-                else ("FAILED" if dqm.criticality == "C" else "SUCCEEDED")
-            )
-            log_dqm = Logs.logDqmDtl(
-                process_id=self.process_id,
-                dataset_id=self.dataset_id,
-                batch_id=batch_id,
-                source_file=log.source_file,
-                column_name=dqm.column_name,
-                qc_type=dqm.qc_type,
-                qc_param=dqm.qc_param,
-                qc_filter=dqm.qc_filter,
-                criticality=dqm.criticality,
-                criticality_threshold_pct=dqm.criticality_threshold_pct,
-                error_count=resp["error_count"],
-                error_pct=resp["error_percentage"],
-                status=status,
-                dqm_start_time=start_time,
-                dqm_end_time=datetime.now(),
-            )
-            print(f"Logging DQM Result: {log_dqm}")
-            orch.insert_log_dqm(log_dqm=log_dqm)
+        if tp == "Null":
+            return f"{col_name} IS NOT NULL"
+        elif tp == "Length":
+            op = "".join([c for c in param if not c.isdigit()])
+            val = "".join([c for c in param if c.isdigit()])
+            if not op: op = "="
+            return f"length({col_name}) {op} {val}"
+        elif tp == "Length-Range":
+            try:
+                r = literal_eval(param)
+                return f"length({col_name}) BETWEEN {min(r)} AND {max(r)}"
+            except:
+                return "1=1"
+        elif tp == "Date":
+            regex = RegexDateFormats.get_date_regex(qc_param=param)
+            regex = regex.replace("'", "''")
+            return f"{col_name} RLIKE '{regex}'"
+        elif tp == "Integer":
+            return f"{col_name} RLIKE '^-?[0-9]+$'"
+        elif tp == "Decimal":
+            return f"{col_name} RLIKE '^-?([0-9]+\\.[0-9]+|[0-9]+|\\.[0-9]+)$'"
+        elif tp == "Regex":
+            param_esc = param.replace("'", "''")
+            return f"{col_name} RLIKE '{param_esc}'"
+        elif tp == "Domain":
+            values = ",".join([f"'{v.strip()}'" for v in param.split(",")])
+            return f"{col_name} IN ({values})"
+        elif tp == "Blank":
+            return f"trim({col_name}) != ''"
+        elif tp == "Custom":
+            return param
+        return "1=1"
 
     def start_dqm_check(self):
-        for log in self.dqm_unprocessed_files:
-            start_time = datetime.now()
-            batch_id = log.batch_id
-            df = (
+        batch_ids = [log.batch_id for log in self.dqm_unprocessed_files]
+        if not batch_ids:
+            return
+
+        try:
+            # Optimization: Process all batches in one pass
+            full_df = (
                 self.spark.read.format("delta")
                 .load(self.data_standardisation_location)
-                .filter(col("batch_id") == batch_id)
+                .filter(F.col("batch_id").isin(batch_ids))
             )
-            original_df = df
 
-            for dqm in self.dqm_masters:
-                func = self.qc_type_to_function.get(dqm.qc_type)
-                if not func:
-                    raise Exception(
-                        f"Unsupported QC Type: {dqm.qc_type}. Supported types are {list(self.qc_type_to_function.keys())}"
-                    )
-                total = df.count()
-                resp = func(
-                    df,
-                    column_name=dqm.column_name,
-                    total_count=total,
-                    error_threshold=dqm.criticality_threshold_pct,
-                    qc_param=dqm.qc_param,
-                    qc_filter=dqm.qc_filter,
-                    qc_id=dqm.qc_id,
-                    dataset_id=self.dataset_id,
-                    failure_path=self.dqm_error_location,
-                    batch_id=batch_id,
-                )
-                self.log_result(resp, dqm, log, batch_id, start_time)
-                if not resp["success"] and dqm.criticality == "C":
-                    raise Exception(
-                        f"Critical DQM check failed for {dqm.column_name} [{dqm.qc_type}]"
-                    )
-                if resp["success"]:
-                    df = resp["df"]
+            # Separate rules: Unique rules require actions (dropDuplicates), others are row-level
+            one_pass_rules = [d for d in self.dqm_masters if d.qc_type != "Unique"]
+            unique_rules = [d for d in self.dqm_masters if d.qc_type == "Unique"]
+            
+            # We handle batches individually for result logging and write-out
+            for batch_log in self.dqm_unprocessed_files:
+                start_time = datetime.now()
+                bid = batch_log.batch_id
+                df = full_df.filter(F.col("batch_id") == bid)
+                
+                # --- Phase 1: Row-level rules (Null, Length, Date, Regex, Custom, etc.) ---
+                if one_pass_rules:
+                    agg_exprs = [F.count("*").alias("total_rows")]
+                    rule_meta = []
+                    current_valid_expr = F.lit(True)
+                    
+                    for dqm in one_pass_rules:
+                        cond_str = self.get_qc_condition(dqm)
+                        if dqm.qc_filter:
+                            filter_expr = " AND ".join(dqm.qc_filter.split(","))
+                            rule_valid_expr = F.expr(f"({filter_expr}) AND ({cond_str})")
+                        else:
+                            rule_valid_expr = F.expr(cond_str)
+                        
+                        next_valid_expr = current_valid_expr & rule_valid_expr
+                        rule_pass_col = f"passed_{dqm.qc_id}"
+                        df = df.withColumn(rule_pass_col, F.when(next_valid_expr, 1).otherwise(0))
+                        
+                        agg_exprs.append(F.sum(rule_pass_col).alias(f"sum_{dqm.qc_id}"))
+                        rule_meta.append((dqm, rule_pass_col))
+                        current_valid_expr = next_valid_expr
 
-            self._write_data(df if dqm.criticality == "C" else original_df, batch_id)
+                    df = df.withColumn("final_valid", F.when(current_valid_expr, 1).otherwise(0))
+                    metrics = df.agg(*agg_exprs).collect()[0]
+                    total = metrics["total_rows"]
+                    
+                    prev_sum = total
+                    for dqm, rule_pass_col in rule_meta:
+                        curr_sum = metrics[f"sum_{dqm.qc_id}"] or 0
+                        fail_count = prev_sum - curr_sum
+                        fail_pct = (fail_count / total * 100) if total > 0 else 0
+                        success = fail_pct < (dqm.criticality_threshold_pct or 0)
+                        
+                        if fail_count > 0:
+                            self._write_failed_optimized(df, bid, dqm, rule_pass_col)
+                        
+                        self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
+                        if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
+                            raise Exception(f"Critical DQM check failed: {dqm.column_name} in batch {bid}")
+                        prev_sum = curr_sum
+                    
+                    df = df.filter(F.col("final_valid") == 1)
+                
+                # --- Phase 2: Unique rules (Sequential using dropDuplicates) ---
+                for dqm in unique_rules:
+                    before_count = df.count()
+                    if before_count == 0:
+                        self.buffer_log(dqm, batch_log, bid, 0, 0, True, start_time)
+                        continue
+                        
+                    unique_cols = [c.strip() for c in dqm.column_name.split(",")]
+                    df_unique = df.dropDuplicates(unique_cols)
+                    after_count = df_unique.count()
+                    
+                    fail_count = before_count - after_count
+                    fail_pct = (fail_count / before_count * 100)
+                    success = fail_pct < (dqm.criticality_threshold_pct or 0)
+                    
+                    if fail_count > 0:
+                        failed_rows = df.subtract(df_unique)
+                        self._write_unique_failed(failed_rows, bid, dqm)
+                    
+                    self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)
+                    if not success and dqm.criticality == Constants.CRITICALITY_CRITICAL:
+                        raise Exception(f"Critical Uniqueness check failed: {dqm.column_name} in batch {bid}")
+                    
+                    df = df_unique
 
-    def _write_data(self, df: DataFrame, batch_id):
-        df = df.withColumn("batch_id", lit(batch_id))
+                # Handle case where NO rules were defined
+                if not one_pass_rules and not unique_rules:
+                    self.buffer_log(DqmMaster.ctlDqmMasterDtl(qc_id=0, column_name="N/A", qc_type="N/A", criticality="W"), batch_log, bid, 0, 0, True, start_time)
 
-        if self.table_location_type.lower() == "external":
+                # Final write of the now-validated dataframe
+                self._write_data_optimized(df, bid)
 
-            df.write.format("delta").mode("append").partitionBy(
-                self.staging_partition_columns
-            ).save(self.staging_location)
-            df.write.format("delta").mode("append").partitionBy(
-                self.publish_partition_columns
-            ).save(self.publish_location)
+        except Exception as e:
+            # Buffer a generic failure if we don't have rule context here
+            # But flush_logs() in finally will save whatever is in the buffer so far
+            raise
+        finally:
+            self.flush_logs()
 
+    def _write_unique_failed(self, failed_df: DataFrame, batch_id, dqm):
+        # Uniqueness failure handling: log the duplicate values
+        cols = [c.strip() for c in dqm.column_name.split(",")]
+        # Cast key columns to string for unified "fail_value"
+        failed = failed_df.withColumn("dqm_check_type", F.lit(dqm.qc_type)) \
+                          .withColumn("failed_column_name", F.lit(dqm.column_name)) \
+                          .withColumn("fail_value", F.concat_ws(",", *[F.col(c) for c in cols])) \
+                          .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+        
+        failed.write.format("delta").mode("append").partitionBy("batch_id").save(self.dqm_error_location)
+
+    def _write_failed_optimized(self, df: DataFrame, batch_id, dqm, rule_pass_col):
+        # Rows that FAILED this specific rule (were valid before but invalid now)
+        # Note: In our progressive logic, fail_count = sum_previous - sum_current
+        # To get the actual rows: we need rows where rule_pass_col == 0 AND (previous rule passed)
+        # However, for simplicity and safety, we filter for the specific failure on the raw data
+        # but only for records that were still in the 'valid' set.
+        
+        # Actually, if we just want the failed records for this rule:
+        failed = df.filter(F.col(rule_pass_col) == 0)
+        # wait, this includes records that failed PREVIOUS rules too.
+        # We need records that failed EXACTLY this rule.
+        # That would be: (previous_rule_pass_col == 1) AND (this_rule_pass_col == 0)
+        
+        # Let's keep it simple: just grab rows where this_rule_pass_col == 0 
+        # but ensure we don't double count if we just want "records that failed".
+        # Current framework writes ALL failed records for each rule to the error table.
+        
+        failed = failed.withColumn("dqm_check_type", F.lit(dqm.qc_type)) \
+                       .withColumn("failed_column_name", F.lit(dqm.column_name)) \
+                       .withColumn("fail_value", F.col(dqm.column_name).cast("string")) \
+                       .select("dqm_check_type", "failed_column_name", "fail_value", "batch_id")
+        
+        failed.write.format("delta").mode("append").partitionBy("batch_id").save(self.dqm_error_location)
+
+    def buffer_log(self, dqm, log, batch_id, fail_count, fail_pct, success, start_time):
+        status = Constants.STATUS_SUCCEEDED if success else (Constants.STATUS_FAILED if dqm.criticality == Constants.CRITICALITY_CRITICAL else Constants.STATUS_SUCCEEDED)
+        log_entry = Logs.logDqmDtl(
+            process_id=self.process_id,
+            dataset_id=self.dataset_id,
+            batch_id=batch_id,
+            source_file=log.source_file,
+            column_name=dqm.column_name,
+            qc_type=dqm.qc_type,
+            qc_param=dqm.qc_param,
+            qc_filter=dqm.qc_filter,
+            criticality=dqm.criticality,
+            criticality_threshold_pct=dqm.criticality_threshold_pct,
+            error_count=fail_count,
+            error_pct=fail_pct,
+            status=status,
+            dqm_start_time=start_time,
+            dqm_end_time=datetime.now(),
+        )
+        self.log_buffer.append(log_entry)
+
+    def flush_logs(self):
+        if not self.log_buffer:
+            return
+        with OrchestrationProcess.OrchestrationProcess() as orch:
+            for entry in self.log_buffer:
+                orch.insert_log_dqm(entry)
+        self.log_buffer = []
+
+    def _write_data_optimized(self, df: DataFrame, batch_id):
+        # Select original columns + batch_id (drop the temporary pass/fail flags)
+        original_cols = [c for c in df.columns if not (c.startswith("passed_") or c in ["final_valid", "all_valid_so_far"])]
+        df = df.select(*original_cols)
+        
+        if self.table_location_type.lower() == Constants.TABLE_TYPE_EXTERNAL:
+            df.write.format("delta").mode("append").partitionBy(self.staging_partition_columns.split(",")).save(self.staging_location)
+            df.write.format("delta").mode("append").partitionBy(self.publish_partition_columns.split(",")).save(self.publish_location)
         else:
-            df.write.format("delta").mode("append").partitionBy(
-                self.staging_partition_columns
-            ).saveAsTable(f"{self.env}.{self.staging_table_name}")
-
-            df.write.format("delta").mode("append").partitionBy(
-                self.publish_partition_columns
-            ).saveAsTable(f"{self.env}.{self.publish_table_name}")
+            df.write.format("delta").mode("append").partitionBy(self.staging_partition_columns.split(",")).saveAsTable(f"{self.env}.{self.staging_table_name}")
+            df.write.format("delta").mode("append").partitionBy(self.publish_partition_columns.split(",")).saveAsTable(f"{self.env}.{self.publish_table_name}")
 
     def handle_no_dqm_masters(self):
-        if not self.dqm_unprocessed_files:
-            raise Exception(f"DQM already processed for Dataset ID {self.dataset_id}.")
         for log in self.dqm_unprocessed_files:
-            start_time = datetime.now()
-            batch_id = log.batch_id
-            df = (
-                self.spark.read.format("delta")
-                .load(self.data_standardisation_location)
-                .filter(col("batch_id") == batch_id)
-            )
-            self._write_data(df, batch_id)
-            with OrchestrationProcess.OrchestrationProcess() as orch:
-                orch.insert_log_dqm(
-                    log_dqm=Logs.logDqmDtl(
-                        process_id=self.process_id,
-                        dataset_id=self.dataset_id,
-                        batch_id=batch_id,
-                        source_file=log.source_file,
-                        status="SUCCEEDED",
-                        dqm_start_time=start_time,
-                        dqm_end_time=datetime.now(),
-                    )
-                )
+            bid = log.batch_id
+            df = self.spark.read.format("delta").load(self.data_standardisation_location).filter(F.col("batch_id") == bid)
+            self._write_data_optimized(df, bid)
+            self.buffer_log(DqmMaster.ctlDqmMasterDtl(qc_type="N/A", criticality="W"), log, bid, 0, 0, True, datetime.now())
+        self.flush_logs()
