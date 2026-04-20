@@ -25,3 +25,4 @@ tests/publish/*
 *.txt
 *.db
 code_review_report.md
+uv.lock
