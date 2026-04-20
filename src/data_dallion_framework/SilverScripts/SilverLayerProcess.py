@@ -11,7 +11,21 @@ from pyspark.sql import SparkSession
 
 
 class SilverLayerProcess:
+    """
+    Coordinates the execution of the entire Silver Layer data processing phase.
+
+    This involves fetching datasets marked for the Silver Layer and running
+    data standardization and data quality check workflows in parallel across them.
+    """
     def __init__(self, spark: SparkSession, process_id, env="dev"):
+        """
+        Initializes the SilverLayerProcess and immediately begins execution.
+
+        Args:
+            spark (SparkSession): The active SparkSession used for data processing.
+            process_id (int/str): The unique identifier for the current orchestration process.
+            env (str, optional): The target environment prefix (e.g., 'dev', 'prod'). Defaults to "dev".
+        """
         self.spark: SparkSession = spark
         self.env = env
 
@@ -37,6 +51,15 @@ class SilverLayerProcess:
     def _handle_silver_layer_process(
         self, dataset_master: DatasetMaster.ctlDatasetMaster
     ):
+        """
+        Executes the chained processes for a single dataset within the Silver Layer.
+
+        Sequentially runs DataStandardization followed by DataQualityCheck,
+        and manages performance timing for each step.
+
+        Args:
+            dataset_master (DatasetMaster.ctlDatasetMaster): Configuration attributes for the dataset.
+        """
 
         DataStandardization_start_time = time()
         DataStandardization.DataStandardization(

@@ -14,10 +14,24 @@ from pathlib import Path
 
 
 class SalesForce:
+    """
+    A foundational connector enabling OAuth 2.0 authorized querying of a Salesforce instance.
+
+    Uses `niquests` to retrieve access tokens from client credentials flow and queries SOQL iteratively.
+    """
     def __init__(
         self,
         connection_config: dict,
     ) -> None:
+        """
+        Validates the configuration and logs into the Salesforce instance, capturing an access token.
+
+        Args:
+            connection_config (dict): Client authorization dictionary mapping keys like domain, client_id, and secret.
+        
+        Raises:
+            Exception: Thrown if auth credentials yield non-200 responses.
+        """
         self.domain = connection_config["domain"]
         client_id = connection_config["client_id"]
         client_secret = connection_config["client_secret"]
@@ -38,6 +52,18 @@ class SalesForce:
             raise Exception(f"Failed In Getting Access Token:\n {response.text}")
 
     def query(self, columns: list[str], dataset_name: str) -> list[dict]:
+        """
+        Executes a dynamic SOQL extraction query capturing all records synchronously.
+
+        Iteratively fetches bulk data by traversing via standard Salesforce `nextRecordsUrl` keys.
+
+        Args:
+            columns (list[str]): The specific target fields to request in the SQL.
+            dataset_name (str): Representative Salesforce object name (e.g. standard Contact, custom MyObject__c).
+
+        Returns:
+            list[dict]: Unnested structured list of python dictionaries mapping column to matching row entity.
+        """
         query_ = f"select {','.join(columns)} FROM {dataset_name}"
 
         endpoint = "/services/data/v62.0/queryAll"
@@ -71,6 +97,11 @@ class SalesForce:
 
 
 class SalesforceExtractor:
+    """
+    Orchestration wrapper directing data retrieved by the SalesForce connector class onto the cluster inbound.
+
+    Implements duplication detection and saves the data iteratively out to an explicitly requested formatting delimiter.
+    """
     def __init__(
         self,
         pre_ingestion_logs: list[logDataAcquisitionDetail],
@@ -84,6 +115,21 @@ class SalesforceExtractor:
         process_id,
         connection_config,
     ):
+        """
+        Initializes extraction from Salesforce utilizing the given config elements.
+
+        Args:
+            pre_ingestion_logs (list[logDataAcquisitionDetail]): Contextual logs to compare filename history preventing duplicated ingestion pipelines.
+            inbound_location (str): Folder structure location path.
+            outbound_source_file_format (str): Expected extension type config like 'csv'.
+            file_pattern (str): General generated naming rule prefix mapping string literal.
+            pre_ingestion_dataset_name (str): Identifier denoting Salesforce SOQL Object names.
+            pre_ingestion_dataset_id (int): Matching orchestration detail mapping ID context.
+            outbound_file_delimiter (str): Data flattening character string logic for generated output files.
+            columns (str): Flattened string listing variables explicitly projected mapped query.
+            process_id (int): Identifying orchestration identifier correlating processing logs into a unified tracking interface.
+            connection_config (str/dict): JSON format connection configuration dictionary containing API host domains and credentials.
+        """
 
         connection_config: dict = json_loads(connection_config)
         file_pattern = (

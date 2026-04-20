@@ -7,6 +7,12 @@ class DDLGenerator:
     Utility class for generating DDL scripts for Delta tables using Jinja2 templates.
     """
     def __init__(self):
+        """
+        Initializes the DDLGenerator by loading the Jinja2 template.
+
+        Raises:
+            FileNotFoundError: If the expected template directory does not exist.
+        """
         # Resolve the template directory relative to this file's location
         # src/data_dallion_framework/Common/DDLGenerator.py -> src/data_dallion_framework/templates
         current_dir = os.path.dirname(os.path.abspath(__file__))

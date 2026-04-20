@@ -10,6 +10,11 @@ from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 
 class SFTPExtractor:
+    """
+    Extracts explicit remote flat files from SFTP servers over standard SSH channels.
+
+    Utilizes Paramiko with private key or raw credential loading mechanisms to ingest the stream sequentially.
+    """
     def __init__(
         self,
         pre_ingestion_logs: list[logDataAcquisitionDetail],
@@ -22,6 +27,20 @@ class SFTPExtractor:
         ssh_key,
         process_id,
     ):
+        """
+        Initializes SFTP protocol interaction traversing foreign locations down to internal landing zones.
+
+        Args:
+            pre_ingestion_logs (list[logDataAcquisitionDetail]): Log entries from earlier loads confirming unique fetching parameters.
+            inbound_location (str): Destination string representing physical file paths to insert flat file strings.
+            outbound_source_location (str): Upstream SFTP source file path directory.
+            file_pattern_static (str): Custom execution indicator 'Y' or 'N' altering regex application against filenames.
+            file_pattern (str): The configuration matching validation string isolating files mapped correctly.
+            connection_config (str/dict): Context mapped credentials JSON defining password, host mappings, and username.
+            pre_ingestion_dataset_id (int): Identifier context linking records to overall meta configuration state.
+            ssh_key (str): Optional Ed25519 PKIX string string buffer mapping if no explicit passwords config mapped.
+            process_id (int): Workflow extraction integer tying together entire framework executions across tables.
+        """
         connection_config: dict = json_loads(connection_config)
 
         pre_ingestion_processed_files = [

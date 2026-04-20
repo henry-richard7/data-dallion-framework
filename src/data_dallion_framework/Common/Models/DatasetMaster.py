@@ -4,6 +4,12 @@ from sqlalchemy import Column, Text, String
 
 
 class ctlDatasetMaster(SQLModel, table=True):
+    """
+    A persistent ORM model representing configuration metadata for dataset layers.
+
+    Captures critical ingestion, transformation, destination, and layer properties
+    required by the framework's orchestration engine to execute processing steps correctly.
+    """
     process_id: int = Field(
         primary_key=True, description="Unique identifier for the data pipeline process."
     )

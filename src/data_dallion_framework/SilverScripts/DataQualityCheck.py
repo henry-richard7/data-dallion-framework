@@ -7,6 +7,12 @@ from data_dallion_framework.Common.Models import Logs, DqmMaster
 
 
 class DataQualityCheck:
+    """
+    Executes Data Quality Management (DQM) checks iteratively over Silver layer data.
+
+    Applies column-level logic like uniqueness checks, regex verifications, type validations,
+    and ranges, maintaining robust validation metric logs while filtering bad records.
+    """
     def __init__(
         self,
         spark: SparkSession,
@@ -23,6 +29,24 @@ class DataQualityCheck:
         table_location_type: str,
         env="dev",
     ):
+        """
+        Initializes the DQM runner and immediately triggers the checks based on configuration.
+
+        Args:
+            spark (SparkSession): The underlying Spark session executing the pipelines.
+            process_id (int): Universal workflow process key indicating extraction status context.
+            dataset_id (int): Metastore key indicating dataset target details.
+            data_standardisation_location (str): Where cleansed upstream data is stored before DQM.
+            dqm_error_location (str): Destination for individual records failing critical tests.
+            staging_location (str): Intermediate physical path for datasets passing validation.
+            staging_partition_columns (str): Flattened string listing partition column headers.
+            staging_table_name (str): The intermediate hive table mapped to the layer.
+            publish_location (str): The finalized storage location for serving valid data.
+            publish_partition_columns (str): Partition logic for published layer structures.
+            publish_table_name (str): Name of the consumable table.
+            table_location_type (str): Denotes table type strategy. (e.g. MANAGED vs EXTERNAL)
+            env (str, optional): The deployment environment context prefix. Defaults to "dev".
+        """
         self.spark = spark
         self.process_id = process_id
         self.dataset_id = dataset_id

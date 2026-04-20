@@ -11,6 +11,13 @@ class JsonDataMapper:
     """
 
     def __init__(self, mapping: dict, json_data):
+        """
+        Initializes the JsonDataMapper with a JSONPath mapping and JSON data.
+
+        Args:
+            mapping (dict): A dictionary where keys are the target fields and values are JSONPath expressions.
+            json_data (dict/list/str): The source JSON data to extract values from.
+        """
         self.mapping = mapping
         self.json_data = json_data
 

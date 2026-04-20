@@ -12,7 +12,21 @@ from data_dallion_framework.GoldScripts.TransformationScripts import (
 
 
 class GoldLayerProcess:
+    """
+    Coordinates the execution of the entire Gold Layer data processing phase.
+
+    This involves fetching matching Gold datasets and running custom standard
+    transformations and data quality verifications in parallel.
+    """
     def __init__(self, spark: SparkSession, process_id, env="dev"):
+        """
+        Initializes the GoldLayerProcess and launches thread pool processing.
+
+        Args:
+            spark (SparkSession): The underlying Spark session executing the pipelines.
+            process_id (int/str): Workflow identifier correlating all execution records.
+            env (str, optional): The deployment environment context prefix. Defaults to "dev".
+        """
         self.spark: SparkSession = spark
         self.env = env
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
@@ -37,6 +51,15 @@ class GoldLayerProcess:
     def _handle_gold_layer_process(
         self, dataset_master: DatasetMaster.ctlDatasetMaster
     ):
+        """
+        Processes an individual dataset sequentially through Gold layer steps.
+
+        Runs Transformation rules followed immediately by Data Quality Checks
+        designed specifically for the finalized data structures.
+
+        Args:
+            dataset_master (DatasetMaster.ctlDatasetMaster): Metastore configuration representing this dataset's lifecycle tracking.
+        """
 
         transformation_start_time = time()
         Transformation.PerformTransformation(
