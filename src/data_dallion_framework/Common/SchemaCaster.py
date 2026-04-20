@@ -14,11 +14,33 @@ from data_dallion_framework.Common.Models.ColumnMetadata import CtlColumnMetadat
 
 
 class SchemaCaster:
+    """
+    Utility class for casting Spark DataFrame columns to explicitly defined data types.
+
+    This class references configured column metadata to dynamically generate
+    and apply casting expressions on DataFrame columns.
+    """
     def __init__(self, df: DataFrame, schema_config: list[CtlColumnMetadata]):
+        """
+        Initializes the SchemaCaster with a DataFrame and its schema configuration.
+
+        Args:
+            df (DataFrame): The Spark DataFrame to be cast.
+            schema_config (list[CtlColumnMetadata]): List of metadata definitions representing the expected schema.
+        """
         self.schema_config = schema_config
         self.df = df
 
     def perform_casting(self):
+        """
+        Applies type casting and date formatting to the DataFrame columns.
+
+        Iterates through the provided schema configuration and generates casting expressions.
+        It also handles date and timestamp fields according to specific formats if provided.
+
+        Returns:
+            DataFrame: The resulting DataFrame with casted columns.
+        """
         cast_exprs = {}
         for column_config in self.schema_config:
             column_name = column_config.column_name

@@ -91,6 +91,15 @@ class APIAutomation:
     #     return json.loads(body)
 
     def date_parse_changer(self, body: dict) -> dict:
+        """
+        Parses the request body and replaces recognized date placeholders with computed date strings.
+
+        Args:
+            body (dict): The original request body as a dictionary.
+
+        Returns:
+            dict: The updated request body with evaluated date substitutions.
+        """
         body = json.dumps(body)
 
         # Supports:
@@ -117,6 +126,15 @@ class APIAutomation:
         return json.loads(body)
 
     def _replace_date(self, date_match: str) -> str:
+        """
+        Calculates and formats the actual date from a specified placeholder string format.
+
+        Args:
+            date_match (str): The regex pattern matched placeholder for the date.
+
+        Returns:
+            str: The computed date formatted as a string.
+        """
 
         # -------- Extract format --------
         if ":" in date_match:
@@ -171,6 +189,18 @@ class APIAutomation:
             return base_date.strftime(date_format)
 
     def _get_base_date(self, key: str) -> datetime:
+        """
+        Resolves the base date corresponding to a given keyword placeholder.
+
+        Args:
+            key (str): The keyword prefix defining the expected date logical type.
+
+        Returns:
+            datetime: The raw base datetime object representing the requested date logic.
+
+        Raises:
+            ValueError: If an unknown placeholder keyword is passed.
+        """
         today = datetime.today()
 
         if key == "current_date":
@@ -417,6 +447,12 @@ class APIAutomation:
 
 
 class APIExtractor:
+    """
+    Extractor class designed to execute and manage API-based data ingestions.
+
+    Utilizes the APIAutomation core to paginate, authenticate, process workflow
+    steps, and save final responses persistently as tabular data files.
+    """
     def __init__(
         self,
         pre_ingestion_logs: list[logDataAcquisitionDetail],
@@ -427,6 +463,18 @@ class APIExtractor:
         outbound_file_delimiter: str,
         process_id: int,
     ):
+        """
+        Initializes the APIExtractor and triggers the data extraction process.
+
+        Args:
+            pre_ingestion_logs (list[logDataAcquisitionDetail]): Historical logs to verify duplicate files.
+            inbound_location (str): Directory path to save the incoming extracted payload.
+            outbound_source_file_format (str): The desired extension format for the saved file (e.g., json, csv).
+            file_pattern (str): The regex configuration string representing the targeted destination file name.
+            pre_ingestion_dataset_id (int): Identifier for matching dataset metadata and orchestration records.
+            outbound_file_delimiter (str): The separating delimiter if writing to parsed flat files.
+            process_id (int): The operational identifier running this extraction instance.
+        """
         file_pattern = (
             file_pattern.split(".")[0] if "." in file_pattern else file_pattern
         )

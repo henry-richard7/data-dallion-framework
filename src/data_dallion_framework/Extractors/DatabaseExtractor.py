@@ -12,6 +12,11 @@ from pyspark.sql import SparkSession
 
 
 class DatabaseExtractor:
+    """
+    Extracts tabular data from specific relational databases mapped by JDBC connections.
+
+    It executes an underlying SQL query and persists the result set onto the targeted inbound filesystem.
+    """
     def __init__(
         self,
         spark: SparkSession,
@@ -26,6 +31,22 @@ class DatabaseExtractor:
         outbound_file_delimiter,
         process_id,
     ):
+        """
+        Initializes the DatabaseExtractor and immediately begins the JDBC extraction sequence.
+
+        Args:
+            spark (SparkSession): Current active Spark application context to use for ingestion runtime.
+            pre_ingestion_logs (list[logDataAcquisitionDetail]): Historical log details tracking extraction executions.
+            inbound_location (str): Standardized filesystem landing path destination.
+            connection_config (str/dict): Parsed JSON authentication combinations defining connection string rules.
+            query (str): Defined relational database executable native SQL string.
+            outbound_source_platform (str): Name representing source DBMS architecture configuration details.
+            outbound_source_file_format (str): Extension structure mapping defining flatfile saves (e.g. csv).
+            file_pattern (str): The regex configurations building mapped outgoing files.
+            pre_ingestion_dataset_id (int): Matching structural metadata orchestrator relational ID.
+            outbound_file_delimiter (str): Data flattening separator character parameter constraint.
+            process_id (int): Correlated ingestion run state ID to pass onto process log creation blocks.
+        """
         connection_config: dict = json_loads(connection_config)
         file_pattern = (
             file_pattern.split(".")[0] if "." in file_pattern else file_pattern

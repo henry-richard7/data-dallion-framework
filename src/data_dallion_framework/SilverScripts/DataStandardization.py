@@ -20,6 +20,11 @@ from data_dallion_framework.Common.Models.DataStandardisation import (
 
 
 class DataStandardization:
+    """
+    Orchestrates table-level column standardizations applied to the dataset's DataFrame.
+
+    Cleans, pads, replaces, and casts strings natively via Spark's DataFrame expressions.
+    """
 
     def __init__(
         self,
@@ -33,6 +38,20 @@ class DataStandardization:
         env,
         landing_table_name,
     ):
+        """
+        Initializes standardization logic and internally triggers the mapping.
+
+        Args:
+            spark (SparkSession): Native active Spark connection context instance.
+            process_id (int): Parent run process ID to catalog task state against.
+            dataset_id (int): Foreign key corresponding to the unique standard validations needed.
+            landing_location (str): Upstream data source physical cluster path.
+            data_standardisation_location (str): Processed data physical cluster write path destination.
+            data_standardisation_partition_columns (str): Comma separated list of structural partition columns.
+            table_location_type (str): Databricks hive table type literal denoting EXTERNAL or MANAGED.
+            env (str): Deployment execution layer context suffix identifier.
+            landing_table_name (str): The logical table name of upstream data to query from if using Hive.
+        """
         self.spark = spark
         self.process_id = process_id
         self.dataset_id = dataset_id

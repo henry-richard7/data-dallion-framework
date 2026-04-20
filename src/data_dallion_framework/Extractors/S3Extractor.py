@@ -10,6 +10,11 @@ from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 
 class S3Extractor:
+    """
+    Handles extracting files out of an AWS S3 bucket directly into the local inbound landing directory.
+
+    Requires securely parsing S3 protocols, configuring Boto3, and iterating matching files down to chunks.
+    """
     def __init__(
         self,
         pre_ingestion_logs: list[logDataAcquisitionDetail],
@@ -21,6 +26,19 @@ class S3Extractor:
         pre_ingestion_dataset_id,
         process_id,
     ):
+        """
+        Initializes the S3Extractor and synchronizes the objects from the bucket.
+
+        Args:
+            pre_ingestion_logs (list[logDataAcquisitionDetail]): Log structures preventing extraction duplications.
+            inbound_location (str): Physical cluster directory path acting as a local sink.
+            outbound_source_location (str): Pre-configured raw S3 URI specifying bucket/folder.
+            file_pattern_static (str): Indicator character ('Y' or 'N') detailing if regex evaluation is customized.
+            file_pattern (str): Raw string defining matching configurations for finding specific subset files.
+            connection_config (str/dict): Parsed JSON format defining programmatic access parameters like aws_access_key_id.
+            pre_ingestion_dataset_id (int): Foreign key connecting to orchestration metadata parameters.
+            process_id (int): Universal workflow process key indicating extraction status context.
+        """
         connection_config: dict = json_loads(connection_config)
 
         pre_ingestion_processed_files = [
@@ -128,6 +146,15 @@ class S3Extractor:
                         )
 
     def parse_location(self, outbound_location: str) -> dict:
+        """
+        Parses an S3 URI to isolate the root Bucket name and underlying prefix path.
+
+        Args:
+            outbound_location (str): Full S3 string representation.
+
+        Returns:
+            dict: Structured dictionary containing exact 'Bucket' and 'Prefix' keys.
+        """
         splited_path = outbound_location.rstrip("/").split("/")
         if splited_path[0] == "":
             splited_path.pop(0)

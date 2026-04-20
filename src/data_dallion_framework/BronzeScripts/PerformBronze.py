@@ -24,7 +24,21 @@ from pyspark.sql import SparkSession, functions as F
 
 
 class PerformBronze:
+    """
+    Handles the Bronze layer processing for the data ingestion pipeline.
+
+    This class coordinates extraction from various sources and creates
+    raw Delta tables in the landing zone based on the dataset configurations.
+    """
     def __init__(self, spark: SparkSession, process_id, env="dev"):
+        """
+        Initializes the PerformBronze process.
+
+        Args:
+            spark (SparkSession): The active Spark Session.
+            process_id (str): The unique identifier for the current ingestion process.
+            env (str, optional): The environment prefix (e.g., 'dev', 'prod'). Defaults to "dev".
+        """
         self.env = env
         self.spark: SparkSession = spark
         self.process_id = process_id
@@ -39,6 +53,16 @@ class PerformBronze:
         self.ddl_gen = DDLGenerator.DDLGenerator()
 
     def _handle_extraction(self, dataAcquisitionDetail: ctlDataAcquisitionDetail):
+        """
+        Handles the data extraction for a specific acquisition detail.
+
+        It resolves connection strings and invokes the appropriate extractor
+        based on the outbound source platform (e.g., SFTP, S3, API, DATABASE, SALESFORCE).
+
+        Args:
+            dataAcquisitionDetail (ctlDataAcquisitionDetail): The configuration
+                details for the data acquisition step.
+        """
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             pre_ingestion_logs: logDataAcquisitionDetail = (
                 orch_process.get_log_data_acquisition_detail(
@@ -208,6 +232,12 @@ class PerformBronze:
             raise
 
     def start_extraction(self):
+        """
+        Starts the parallel extraction and table creation process.
+
+        Uses ThreadPoolExecutor to concurrently run extraction jobs and
+        subsequently creates raw tables for the processed datasets.
+        """
         with ThreadPoolExecutor(max_workers=min(5, len(self.bronze_datasets))) as executor:
             futures = [executor.submit(self._handle_extraction, dtl) for dtl in self.bronze_datasets]
             for f in futures: f.result()

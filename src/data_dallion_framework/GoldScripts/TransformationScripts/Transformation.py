@@ -20,6 +20,12 @@ from data_dallion_framework.Common.Models import Logs
 
 
 class PerformTransformation:
+    """
+    Conducts Gold layer transformations such as JOINS, AGGREGATES, and UNIONS.
+
+    Reads metadata defined dependencies tying multiple upstream sources together
+    into cohesive modeled records spanning multiple files dynamically.
+    """
     def __init__(
         self,
         spark: SparkSession,
@@ -29,6 +35,17 @@ class PerformTransformation:
         table_location_type: str,
         env: str = "dev",
     ):
+        """
+        Initializes the Gold Transformation sequence and triggers rule interpretation.
+
+        Args:
+            spark (SparkSession): Main driver Spark runtime context reference.
+            process_id (int): ID tagging current batch across all system executions.
+            dataset_id (int): Internal target configuration dataset matching logic.
+            transformation_table_name (str): Standardize table identifier representing gold outputs.
+            table_location_type (str): Flag denoting the table access type (EXTERNAL/MANAGED).
+            env (str, optional): Target environment scope parameter prefix. Defaults to "dev".
+        """
         self.spark = spark
         self.table_location_type = table_location_type
         self.env = env

@@ -12,6 +12,12 @@ from data_dallion_framework.Common.Models import Logs, DqmMaster
 
 
 class DataQualityCheckTransformation:
+    """
+    Executes Data Quality Management (DQM) checks specifically against Gold layer entities.
+
+    Evaluates configured uniqueness, format ranges, length definitions, and explicit data types
+    using Spark syntax translations over aggregated downstream tables.
+    """
     def __init__(
         self,
         spark: SparkSession,
@@ -26,6 +32,22 @@ class DataQualityCheckTransformation:
         table_location_type,
         env="dev",
     ):
+        """
+        Initializes Gold DQM rule testing framework mapping configurations to execution.
+
+        Args:
+            spark (SparkSession): Local underlying Spark driver context.
+            process_id (int): Tracking workflow system parent execution instance ID.
+            dataset_id (int): Distinct relational catalog table metadata mapping ID.
+            transformation_table_name (str): Reference string pointing to ingested source SQL object.
+            transformation_location (str): Underlying remote or local cluster volume reading bucket.
+            dqm_error_location (str): Directory where identified non-compliant dataset row anomalies reside.
+            publish_location (str): Destination cluster persistent storage path saving surviving clean blocks.
+            publish_partition_columns (str): Separating chunk indicator keys handling file partitioning.
+            publish_table_name (str): The persistent hive level table pointer mapping valid sets.
+            table_location_type (str): Storage style indicator logic representing external bucket behavior vs standard table mode.
+            env (str, optional): The execution environment descriptor string. Defaults to "dev".
+        """
         self.spark = spark
         self.process_id = process_id
         self.dataset_id = dataset_id
