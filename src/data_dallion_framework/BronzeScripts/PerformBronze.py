@@ -34,7 +34,7 @@ class PerformBronze:
             )
             self.bronze_dataset_masters = orch_process.get_dataset_master(
                 process_id=process_id,
-                dataset_type="BRONZE",
+                dataset_type=Constants.LAYER_BRONZE,
             )
         self.ddl_gen = DDLGenerator.DDLGenerator()
 

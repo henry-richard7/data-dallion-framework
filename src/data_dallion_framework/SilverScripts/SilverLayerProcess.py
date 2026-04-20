@@ -1,4 +1,4 @@
-from data_dallion_framework.Common import OrchestrationProcess
+from data_dallion_framework.Common import OrchestrationProcess, Constants
 from data_dallion_framework.Common.Models import DatasetMaster
 from concurrent.futures import ThreadPoolExecutor
 from data_dallion_framework.SilverScripts import (
@@ -17,7 +17,7 @@ class SilverLayerProcess:
 
         with OrchestrationProcess.OrchestrationProcess() as orch_process:
             self.silver_datasets = orch_process.get_dataset_master(
-                process_id=process_id, dataset_type="BRONZE"
+                process_id=process_id, dataset_type=Constants.LAYER_SILVER
             )
 
         with ThreadPoolExecutor(
