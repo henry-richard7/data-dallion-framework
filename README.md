@@ -9,6 +9,8 @@
   <a href="https://pypi.org/project/data-dallion-framework/"><img src="https://badge.fury.io/py/data-dallion-framework.svg" alt="PyPI version"></a>
 </p>
 
+🚧 **Work in Progress** 🚧
+
 **DataDallion Framework** is a metadata-driven data engineering framework for building and orchestrating [Medallion Architecture](https://www.databricks.com/glossary/medallion-architecture) pipelines. Define your entire pipeline — sources, schemas, quality rules, and transformations — in a central metadata store. DataDallion handles the rest.
 
 ---
