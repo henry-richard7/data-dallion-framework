@@ -1,4 +1,4 @@
-from re import match as regex_pattern_matches
+from re import match as regex_pattern_matches, fullmatch as regex_pattern_full_matches
 
 
 def validate_pattern(file_pattern: str, file_name: str, custom: bool = False) -> bool:
@@ -37,11 +37,12 @@ def validate_pattern(file_pattern: str, file_name: str, custom: bool = False) ->
     if custom:
         return bool(regex_pattern_matches(file_pattern, file_name))
 
+    escaped_pattern = file_pattern.replace(".", r"\.")
     regex_pattern = (
-        file_pattern.replace("YYYYMMDD", "[0-9]{8}")
+        escaped_pattern.replace("YYYYMMDD", "[0-9]{8}")
         .replace("YYYYMM", "[0-9]{6}")
         .replace("YYYY", "[0-9]{4}")
         .replace("*", ".*")
     )
 
-    return bool(regex_pattern_matches(regex_pattern, file_name))
+    return bool(regex_pattern_full_matches(regex_pattern, file_name))

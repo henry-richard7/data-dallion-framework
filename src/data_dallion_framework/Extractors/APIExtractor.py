@@ -439,11 +439,13 @@ class APIAutomation:
         Returns:
             (Union[dict, List[dict]]): Result of the final API call.
         """
+        last_response = None
         for step in self.config:
             if step["type"] == "TOKEN":
                 self.fetch_token(step)
             else:
-                return self.make_request(step)
+                last_response = self.make_request(step)
+        return last_response
 
 
 class APIExtractor:

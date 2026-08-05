@@ -141,9 +141,8 @@ class S3Extractor:
                                 raise
 
                     else:
-                        raise Exception(
-                            f"{file_save_name} Is Already Moved to Inbound Location."
-                        )
+                        print(f"{file_save_name} is already processed. Skipping.")
+                        continue
 
     def parse_location(self, outbound_location: str) -> dict:
         """
@@ -155,7 +154,13 @@ class S3Extractor:
         Returns:
             dict: Structured dictionary containing exact 'Bucket' and 'Prefix' keys.
         """
-        splited_path = outbound_location.rstrip("/").split("/")
+        cleaned_path = outbound_location
+        for scheme in ["s3://", "s3a://", "s3n://"]:
+            if cleaned_path.startswith(scheme):
+                cleaned_path = cleaned_path[len(scheme):]
+                break
+
+        splited_path = cleaned_path.rstrip("/").split("/")
         if splited_path[0] == "":
             splited_path.pop(0)
         bucket_name = splited_path[0]

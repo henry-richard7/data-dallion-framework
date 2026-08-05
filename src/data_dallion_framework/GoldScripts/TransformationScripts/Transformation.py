@@ -120,7 +120,7 @@ class PerformTransformation:
                             full_source_table_name=source_details[0]["full_source_table_name"],
                             batch_id=batch_id
                         )
-                        df = df.drop("batch_id")
+                        df = df.drop("batch_id").alias(source_details[0]["source_table_name"])
 
                         if source_details[0]["transformation_type"] == "SINGLE":
                             if source_details[0]["extra_values"]:
@@ -134,6 +134,7 @@ class PerformTransformation:
                                     full_source_table_name=source_detail["full_source_table_name"],
                                     batch_id=batch_id
                                 )
+                                df_ = df_.drop("batch_id").alias(source_detail["source_table_name"])
                                 if source_detail["transformation_type"] == "UNION":
                                     df = df.union(df_)
                                 elif source_detail["transformation_type"] == "JOIN":

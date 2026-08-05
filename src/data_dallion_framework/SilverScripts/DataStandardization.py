@@ -183,8 +183,9 @@ class DataStandardization:
                 df = self.spark.read.table(f"{self.env}.{self.landing_table_name}").filter(col("batch_id").isin(batch_ids))
 
             # Strictly check that the input columns (minus batch_id) match expectations
-            input_cols = [c for c in df.columns if c != "batch_id"]
-            if sorted(input_cols) == sorted(source_column_names):
+            input_cols_lower = [c.lower() for c in df.columns if c != "batch_id"]
+            source_cols_lower = [c.lower() for c in source_column_names]
+            if sorted(input_cols_lower) == sorted(source_cols_lower):
                 # Ensure correct column order for rename
                 df_data = df.select(*source_column_names, "batch_id")
                 

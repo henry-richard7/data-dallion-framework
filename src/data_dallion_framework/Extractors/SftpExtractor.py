@@ -132,6 +132,5 @@ class SFTPExtractor:
                         )
                     raise
             else:
-                raise Exception(
-                    f"{file_save_name} Is Already Moved to Inbound location. Hence Failing the process."
-                )
+                print(f"{file_save_name} is already processed. Skipping.")
+                continue
