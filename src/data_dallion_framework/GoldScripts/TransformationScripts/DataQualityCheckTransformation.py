@@ -8,7 +8,10 @@ from data_dallion_framework.Common import (
     RegexDateFormats,
     SchemaCaster,
 )
+from data_dallion_framework.Common.Logging import get_logger
 from data_dallion_framework.Common.Models import Logs, DqmMaster
+
+logger = get_logger(__name__)
 
 
 class DataQualityCheckTransformation:
@@ -96,7 +99,7 @@ class DataQualityCheckTransformation:
     def write_failed(
         self, input_df: DataFrame, passed_df: DataFrame, column, check_type, path
     ):
-        print("Writing Failed records.")
+        logger.info("Writing Failed records.")
         if check_type != "UNIQUE":
             failed = (
                 input_df.subtract(passed_df)

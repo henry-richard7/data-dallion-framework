@@ -18,8 +18,11 @@ from data_dallion_framework.Common import (
     Constants,
 )
 from data_dallion_framework.Common.SecretManager import resolve_secret
+from data_dallion_framework.Common.Logging import get_logger
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 from dateutil.relativedelta import relativedelta
+
+logger = get_logger(__name__)
 
 
 class APIAutomation:
@@ -430,7 +433,7 @@ class APIAutomation:
                     json=to_perform_request if json_body else None,
                     verify=ssl_verify,
                 )
-                print(response_.url)
+                logger.info(f"Request URL: {response_.url}")
                 responses.append(response_)
 
         if not step.get("key_to_add_to_data"):
@@ -615,7 +618,7 @@ class APIExtractor:
                     final_results = list()
 
                     for response in api_response.get("values_based_response"):
-                        print(response)
+                        logger.info(f"Response: {response}")
                         mapped_data = JsonDataMapper.JsonDataMapper(
                             mapping=json_mapping,
                             json_data=response,

@@ -5,6 +5,10 @@ from json import loads
 from typing import Optional
 from cryptography.fernet import Fernet
 
+from data_dallion_framework.Common.Logging import get_logger
+
+logger = get_logger(__name__)
+
 def decrypt_value(encrypted_val: str) -> str:
     """Decrypt a locally encrypted value using the symmetric encryption key."""
     cipher_text = encrypted_val[len("encrypted:"):]
@@ -19,7 +23,7 @@ def encrypt_value(plain_text: str) -> str:
     key = os.environ.get("DATADALLION_ENCRYPTION_KEY")
     if not key:
         key = Fernet.generate_key().decode()
-        print(f"WARNING: DATADALLION_ENCRYPTION_KEY not set. Generated a new key for you: {key}")
+        logger.warning(f"DATADALLION_ENCRYPTION_KEY not set. Generated a new key for you: {key}")
         os.environ["DATADALLION_ENCRYPTION_KEY"] = key
     f = Fernet(key.encode())
     cipher_text = f.encrypt(plain_text.encode()).decode()

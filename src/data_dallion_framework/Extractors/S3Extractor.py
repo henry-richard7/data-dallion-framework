@@ -7,7 +7,10 @@ import traceback
 
 from data_dallion_framework.Common import OrchestrationProcess, PatternValidator
 from data_dallion_framework.Common.SecretManager import resolve_secret
+from data_dallion_framework.Common.Logging import get_logger
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
+
+logger = get_logger(__name__)
 
 
 class S3Extractor:
@@ -153,7 +156,7 @@ class S3Extractor:
                                 raise
 
                     else:
-                        print(f"{file_save_name} is already processed. Skipping.")
+                        logger.info(f"{file_save_name} is already processed. Skipping.")
                         continue
 
     def parse_location(self, outbound_location: str) -> dict:
