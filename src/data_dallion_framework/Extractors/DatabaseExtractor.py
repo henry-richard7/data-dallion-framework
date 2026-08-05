@@ -3,6 +3,7 @@ import glob
 import shutil
 
 from data_dallion_framework.Common import FileNameGenerator, OrchestrationProcess
+from data_dallion_framework.Common.SecretManager import resolve_secret
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 from datetime import datetime
@@ -50,6 +51,7 @@ class DatabaseExtractor:
             process_id (int): Correlated ingestion run state ID to pass onto process log creation blocks.
         """
         connection_config: dict = json_loads(connection_config)
+        connection_config = {k: resolve_secret(v) if isinstance(v, str) else v for k, v in connection_config.items()}
         file_pattern = (
             file_pattern.split(".")[0] if "." in file_pattern else file_pattern
         )

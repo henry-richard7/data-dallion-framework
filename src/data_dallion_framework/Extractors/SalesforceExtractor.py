@@ -1,6 +1,7 @@
 import traceback
 
 from data_dallion_framework.Common import OrchestrationProcess, FileNameGenerator, Constants
+from data_dallion_framework.Common.SecretManager import resolve_secret
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 import niquests
@@ -136,6 +137,7 @@ class SalesforceExtractor:
         """
 
         connection_config: dict = json_loads(connection_config)
+        connection_config = {k: resolve_secret(v) if isinstance(v, str) else v for k, v in connection_config.items()}
         file_pattern = (
             file_pattern.split(".")[0] if "." in file_pattern else file_pattern
         )

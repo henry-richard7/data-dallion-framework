@@ -6,6 +6,7 @@ from pathlib import Path
 import traceback
 
 from data_dallion_framework.Common import OrchestrationProcess, PatternValidator
+from data_dallion_framework.Common.SecretManager import resolve_secret
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 
@@ -40,6 +41,7 @@ class S3Extractor:
             process_id (int): Universal workflow process key indicating extraction status context.
         """
         connection_config: dict = json_loads(connection_config)
+        connection_config = {k: resolve_secret(v) if isinstance(v, str) else v for k, v in connection_config.items()}
 
         pre_ingestion_processed_files = [
             x.inbound_file_location for x in pre_ingestion_logs

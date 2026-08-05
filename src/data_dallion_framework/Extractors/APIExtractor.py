@@ -17,6 +17,7 @@ from data_dallion_framework.Common import (
     OrchestrationProcess,
     Constants,
 )
+from data_dallion_framework.Common.SecretManager import resolve_secret
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 from dateutil.relativedelta import relativedelta
 
@@ -542,21 +543,21 @@ class APIExtractor:
                     temp_dict["token_path"] = api_connection_dtl.token_path
 
                     if api_connection_dtl.client_id is not None:
-                        temp_dict["client_id"] = api_connection_dtl.client_id
+                        temp_dict["client_id"] = resolve_secret(api_connection_dtl.client_id)
                     if api_connection_dtl.client_secret is not None:
-                        temp_dict["client_secret"] = api_connection_dtl.client_secret
+                        temp_dict["client_secret"] = resolve_secret(api_connection_dtl.client_secret)
 
                     if api_connection_dtl.username is not None:
-                        temp_dict["username"] = api_connection_dtl.username
+                        temp_dict["username"] = resolve_secret(api_connection_dtl.username)
                     if api_connection_dtl.password is not None:
-                        temp_dict["password"] = api_connection_dtl.password
+                        temp_dict["password"] = resolve_secret(api_connection_dtl.password)
 
                     if api_connection_dtl.issuer is not None:
-                        temp_dict["issuer"] = api_connection_dtl.issuer
+                        temp_dict["issuer"] = resolve_secret(api_connection_dtl.issuer)
                     if api_connection_dtl.scope is not None:
-                        temp_dict["scope"] = api_connection_dtl.scope
+                        temp_dict["scope"] = resolve_secret(api_connection_dtl.scope)
                     if api_connection_dtl.private_key is not None:
-                        temp_dict["private_key"] = api_connection_dtl.private_key
+                        temp_dict["private_key"] = resolve_secret(api_connection_dtl.private_key)
 
                 else:
                     temp_dict["url"] = api_connection_dtl.url

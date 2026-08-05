@@ -6,6 +6,7 @@ from pathlib import Path
 import traceback
 
 from data_dallion_framework.Common import OrchestrationProcess, PatternValidator
+from data_dallion_framework.Common.SecretManager import resolve_secret
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 
@@ -42,6 +43,8 @@ class SFTPExtractor:
             process_id (int): Workflow extraction integer tying together entire framework executions across tables.
         """
         connection_config: dict = json_loads(connection_config)
+        connection_config = {k: resolve_secret(v) if isinstance(v, str) else v for k, v in connection_config.items()}
+        ssh_key = resolve_secret(ssh_key)
 
         pre_ingestion_processed_files = [
             x.inbound_file_location for x in pre_ingestion_logs

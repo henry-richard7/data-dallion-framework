@@ -133,3 +133,70 @@ def test_salesforce_query_generator(monkeypatch):
     assert len(batches) == 2
     assert batches[0] == [{"Name": "Record 1", "Id": "1"}]
     assert batches[1] == [{"Name": "Record 2", "Id": "2"}]
+
+from data_dallion_framework.Common.SecretManager import resolve_secret, encrypt_value, decrypt_value
+import json
+
+def test_secret_manager_encryption(monkeypatch):
+    key = "7Nf_7K3K1X5aB6_V1v1f1R_K1v1f1R_K1v1f1R_K1v8="
+    monkeypatch.setenv("DATADALLION_ENCRYPTION_KEY", key)
+    
+    plain_text = "SuperSecretDbPassword123"
+    encrypted_val = encrypt_value(plain_text)
+    
+    assert encrypted_val.startswith("encrypted:")
+    decrypted_val = resolve_secret(encrypted_val)
+    assert decrypted_val == plain_text
+
+def test_secret_manager_aws_secrets(monkeypatch):
+    mock_sm_client = MagicMock()
+    mock_sm_client.get_secret_value.return_value = {
+        "SecretString": json.dumps({"db_password": "aws_secret_password"})
+    }
+    monkeypatch.setattr("boto3.client", lambda service: mock_sm_client if service == "secretsmanager" else MagicMock())
+    
+    res = resolve_secret("secretsmanager:prod/db:db_password")
+    assert res == "aws_secret_password"
+    mock_sm_client.get_secret_value.assert_called_with(SecretId="prod/db")
+
+def test_secret_manager_azure_kv(monkeypatch):
+    monkeypatch.setenv("AZURE_CLIENT_ID", "fake_client")
+    monkeypatch.setenv("AZURE_CLIENT_SECRET", "fake_secret")
+    monkeypatch.setenv("AZURE_TENANT_ID", "fake_tenant")
+    
+    mock_post = MagicMock()
+    mock_post.return_value.json.return_value = {"access_token": "azure_access_token"}
+    monkeypatch.setattr("niquests.post", mock_post)
+    
+    mock_get = MagicMock()
+    mock_get.return_value.json.return_value = {"value": "azure_secret_value"}
+    monkeypatch.setattr("niquests.get", mock_get)
+    
+    res = resolve_secret("keyvault:myvault/dbpassword")
+    assert res == "azure_secret_value"
+    
+    mock_get.assert_called_with(
+        "https://myvault.vault.azure.net/secrets/dbpassword?api-version=7.4",
+        headers={"Authorization": "Bearer azure_access_token"},
+        timeout=10
+    )
+
+def test_secret_manager_hashicorp_vault(monkeypatch):
+    monkeypatch.setenv("VAULT_TOKEN", "fake_vault_token")
+    monkeypatch.setenv("VAULT_ADDR", "http://127.0.0.1:8200")
+    
+    mock_get = MagicMock()
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "data": {"data": {"password": "vault_secret_password"}}
+    }
+    monkeypatch.setattr("niquests.get", mock_get)
+    
+    res = resolve_secret("vault:secret/db:password")
+    assert res == "vault_secret_password"
+    
+    mock_get.assert_called_with(
+        "http://127.0.0.1:8200/v1/secret/data/db",
+        headers={"X-Vault-Token": "fake_vault_token"},
+        timeout=10
+    )
