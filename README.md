@@ -26,6 +26,8 @@
 - [Metadata models](#metadata-models)
 - [Supported connectors](#supported-connectors)
 - [Data quality checks](#data-quality-checks)
+- [Standard Operating Procedure (SOP)](docs/STANDARD_OPERATING_PROCEDURE.md)
+- [KMS & Secrets Guide](docs/KMS_DOCUMENTATION.md)
 - [Contributing](#contributing)
 - [License](#license)
 
