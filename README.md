@@ -145,7 +145,7 @@ DB_USER=myuser
 DB_PASSWORD=mypassword
 ```
 
-> **Security note** — `DB_PASSWORD` and any connector credentials stored in `ctlDataAcquisitionConnectionMaster` are stored as plaintext. In production, use database-level encryption or a secrets manager (AWS Secrets Manager, HashiCorp Vault) and inject credentials at runtime.
+> **Security note** — Credential values in configuration tables (like passwords, keys, or client secrets in `sa_column` fields or JSON configurations) can be stored securely using the integrated **Key Management System (KMS)**. AWS Secrets Manager, Azure Key Vault, HashiCorp Vault, and local symmetric Fernet encryption are supported natively. Refer to the [KMS & Secrets Integration Guide](docs/KMS_DOCUMENTATION.md) for full instructions.
 
 ---
 
