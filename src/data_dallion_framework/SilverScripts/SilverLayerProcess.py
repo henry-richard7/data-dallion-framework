@@ -34,6 +34,9 @@ class SilverLayerProcess:
                 process_id=process_id, dataset_type=Constants.LAYER_SILVER
             )
 
+        if not self.silver_datasets:
+            return
+
         with ThreadPoolExecutor(
             max_workers=min(5, len(self.silver_datasets))
         ) as executor:

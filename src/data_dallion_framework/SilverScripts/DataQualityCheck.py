@@ -2,6 +2,7 @@
 from datetime import datetime
 from pyspark.sql import DataFrame, SparkSession, functions as F
 from ast import literal_eval
+from pyspark.sql.window import Window
 from data_dallion_framework.Common import OrchestrationProcess, RegexDateFormats, Constants
 from data_dallion_framework.Common.Models import Logs, DqmMaster
 
@@ -178,7 +179,7 @@ class DataQualityCheck:
                     
                     df = df.filter(F.col("final_valid") == 1)
                 
-                # --- Phase 2: Unique rules (Sequential using dropDuplicates) ---
+                # --- Phase 2: Unique rules (Sequential using window function) ---
                 for dqm in unique_rules:
                     before_count = df.count()
                     if before_count == 0:
@@ -186,15 +187,21 @@ class DataQualityCheck:
                         continue
                         
                     unique_cols = [c.strip() for c in dqm.column_name.split(",")]
-                    df_unique = df.dropDuplicates(unique_cols)
-                    after_count = df_unique.count()
                     
-                    fail_count = before_count - after_count
-                    fail_pct = (fail_count / before_count * 100)
+                    # Optimize: Use Window function to flag duplicates instead of subtract
+                    w = Window.partitionBy(*unique_cols).orderBy(F.lit(1))
+                    df_marked = df.withColumn("row_num", F.row_number().over(w))
+                    
+                    df_unique = df_marked.filter(F.col("row_num") == 1).drop("row_num")
+                    failed_rows = df_marked.filter(F.col("row_num") > 1).drop("row_num")
+                    
+                    fail_count = failed_rows.count()
+                    after_count = before_count - fail_count
+                    
+                    fail_pct = (fail_count / before_count * 100) if before_count > 0 else 0
                     success = fail_pct < (dqm.criticality_threshold_pct or 0)
                     
                     if fail_count > 0:
-                        failed_rows = df.subtract(df_unique)
                         self._write_unique_failed(failed_rows, bid, dqm)
                     
                     self.buffer_log(dqm, batch_log, bid, fail_count, fail_pct, success, start_time)

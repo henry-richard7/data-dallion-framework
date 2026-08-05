@@ -179,7 +179,7 @@ class PerformBronze:
 
         # Optimization: Process all files in a single Spark session if they meet strict schema rules
         try:
-            format_str = "parquet" if dataset.inbound_file_format == "parquet" else "csv"
+            format_str = dataset.inbound_file_format.lower()
             reader = self.spark.read.format(format_str).option("inferSchema", "true").option("header", "true")
             if format_str == "csv":
                 reader = reader.option("delimiter", dataset.inbound_file_delimiter)
@@ -238,10 +238,12 @@ class PerformBronze:
         Uses ThreadPoolExecutor to concurrently run extraction jobs and
         subsequently creates raw tables for the processed datasets.
         """
-        with ThreadPoolExecutor(max_workers=min(5, len(self.bronze_datasets))) as executor:
-            futures = [executor.submit(self._handle_extraction, dtl) for dtl in self.bronze_datasets]
-            for f in futures: f.result()
+        if self.bronze_datasets:
+            with ThreadPoolExecutor(max_workers=min(5, len(self.bronze_datasets))) as executor:
+                futures = [executor.submit(self._handle_extraction, dtl) for dtl in self.bronze_datasets]
+                for f in futures: f.result()
 
-        with ThreadPoolExecutor(max_workers=min(5, len(self.bronze_dataset_masters))) as executor:
-            futures = [executor.submit(self._handle_raw_table_creation, master) for master in self.bronze_dataset_masters]
-            for f in futures: f.result()
+        if self.bronze_dataset_masters:
+            with ThreadPoolExecutor(max_workers=min(5, len(self.bronze_dataset_masters))) as executor:
+                futures = [executor.submit(self._handle_raw_table_creation, master) for master in self.bronze_dataset_masters]
+                for f in futures: f.result()

@@ -1,6 +1,6 @@
 import traceback
 
-from data_dallion_framework.Common import OrchestrationProcess, FileNameGenerator
+from data_dallion_framework.Common import OrchestrationProcess, FileNameGenerator, Constants
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 
 import niquests
@@ -43,7 +43,18 @@ class SalesForce:
             "client_secret": client_secret,
         }
 
-        response = niquests.post(url=f"{self.domain}{oauth_endpoint}", data=payload)
+        self.retry_config = niquests.RetryConfiguration(
+            total=Constants.API_DEFAULT_RETRIES,
+            backoff_factor=Constants.API_BACKOFF_FACTOR,
+            status_forcelist=[502, 503, 504, 429]
+        )
+
+        response = niquests.post(
+            url=f"{self.domain}{oauth_endpoint}", 
+            data=payload,
+            timeout=Constants.API_DEFAULT_TIMEOUT,
+            retries=self.retry_config,
+        )
 
         if response.status_code == 200:
             access_token = response.json()["access_token"]
@@ -51,9 +62,9 @@ class SalesForce:
         else:
             raise Exception(f"Failed In Getting Access Token:\n {response.text}")
 
-    def query(self, columns: list[str], dataset_name: str) -> list[dict]:
+    def query(self, columns: list[str], dataset_name: str):
         """
-        Executes a dynamic SOQL extraction query capturing all records synchronously.
+        Executes a dynamic SOQL extraction query capturing all records.
 
         Iteratively fetches bulk data by traversing via standard Salesforce `nextRecordsUrl` keys.
 
@@ -61,8 +72,8 @@ class SalesForce:
             columns (list[str]): The specific target fields to request in the SQL.
             dataset_name (str): Representative Salesforce object name (e.g. standard Contact, custom MyObject__c).
 
-        Returns:
-            list[dict]: Unnested structured list of python dictionaries mapping column to matching row entity.
+        Yields:
+            list[dict]: Batch of python dictionaries mapping column to matching row entity.
         """
         query_ = f"select {','.join(columns)} FROM {dataset_name}"
 
@@ -71,29 +82,22 @@ class SalesForce:
             f"{self.domain}{endpoint}",
             headers=self.headers,
             params={"q": query_},
+            timeout=Constants.API_DEFAULT_TIMEOUT,
+            retries=self.retry_config,
         ).json()
 
         records = response["records"]
-        more_results = list()
-
-        results = list()
-        for record in records:
-            results.append({column: record[column] for column in columns})
+        yield [{column: record[column] for column in columns} for record in records]
 
         while not response["done"]:
             response = niquests.get(
                 f"{self.domain}{response['nextRecordsUrl']}",
                 headers=self.headers,
+                timeout=Constants.API_DEFAULT_TIMEOUT,
+                retries=self.retry_config,
             ).json()
             records_ = response["records"]
-
-            for record in records_:
-                more_results.append({column: record[column] for column in columns})
-
-        if len(more_results) != 0:
-            results = results + more_results
-
-        return results
+            yield [{column: record[column] for column in columns} for record in records_]
 
 
 class SalesforceExtractor:
@@ -140,8 +144,8 @@ class SalesforceExtractor:
         ]
 
         try:
-            Path(inbound_location).mkdir(parents=True)
-        except:
+            Path(inbound_location).mkdir(parents=True, exist_ok=True)
+        except OSError:
             pass
 
         save_file_name = FileNameGenerator.file_name_generator(file_pattern)
@@ -158,16 +162,16 @@ class SalesforceExtractor:
                     connection_config=connection_config,
                 )
                 columns = columns.split(",")
-                records = salesforce_extractor.query(
-                    columns=columns, dataset_name=pre_ingestion_dataset_name
-                )
-
                 with open(file_save_name, mode="w", newline="") as file:
                     writer = csv.DictWriter(
                         file, fieldnames=columns, delimiter=outbound_file_delimiter
                     )
                     writer.writeheader()
-                    writer.writerows(records)
+                    
+                    for records_batch in salesforce_extractor.query(
+                        columns=columns, dataset_name=pre_ingestion_dataset_name
+                    ):
+                        writer.writerows(records_batch)
 
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(

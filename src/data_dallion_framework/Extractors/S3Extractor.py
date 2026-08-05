@@ -46,8 +46,8 @@ class S3Extractor:
         ]
 
         try:
-            Path(inbound_location).mkdir(parents=True)
-        except:
+            Path(inbound_location).mkdir(parents=True, exist_ok=True)
+        except OSError:
             pass
 
         client_id = connection_config["client_id"]
@@ -68,8 +68,18 @@ class S3Extractor:
         if region:
             config_["region"] = region
 
+        s3_config_args = {
+            "connect_timeout": 10.0,
+            "read_timeout": 30.0,
+            "retries": {
+                "max_attempts": 3,
+                "mode": "standard"
+            }
+        }
         if signature_version:
-            config_["config"] = Config(signature_version=signature_version)
+            s3_config_args["signature_version"] = signature_version
+
+        config_["config"] = Config(**s3_config_args)
 
         s3_client = boto3.client(
             "s3",

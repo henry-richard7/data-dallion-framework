@@ -15,6 +15,7 @@ from data_dallion_framework.Common import (
     JsonDataMapper,
     FileNameGenerator,
     OrchestrationProcess,
+    Constants,
 )
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
 from dateutil.relativedelta import relativedelta
@@ -43,6 +44,11 @@ class APIAutomation:
         self.params = {}
         self.data = {}
         self.json_body = {}
+        self.retry_config = niquests.RetryConfiguration(
+            total=Constants.API_DEFAULT_RETRIES,
+            backoff_factor=Constants.API_BACKOFF_FACTOR,
+            status_forcelist=[502, 503, 504, 429]
+        )
 
     # def _replace_date(self, date_match) -> str:
     #     """
@@ -254,6 +260,8 @@ class APIAutomation:
                     "client_id": step["client_id"],
                     "client_secret": step["client_secret"],
                 },
+                timeout=Constants.API_DEFAULT_TIMEOUT,
+                retries=self.retry_config,
             )
             response.raise_for_status()
             self.headers = {
@@ -276,6 +284,8 @@ class APIAutomation:
                     "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
                     "assertion": jwt_token,
                 },
+                timeout=Constants.API_DEFAULT_TIMEOUT,
+                retries=self.retry_config,
             )
             response.raise_for_status()
             self.headers = {
@@ -296,6 +306,8 @@ class APIAutomation:
             response = niquests.request(
                 method=step["method"].upper(),
                 url=step["token_url"],
+                timeout=Constants.API_DEFAULT_TIMEOUT,
+                retries=self.retry_config,
             ).json()
             self.headers = {
                 "Authorization": "Bearer " + response.get(step["token_path"])
@@ -337,6 +349,8 @@ class APIAutomation:
             data=data if data else None,
             json=json_body if json_body else None,
             verify=ssl_verify,
+            timeout=Constants.API_DEFAULT_TIMEOUT,
+            retries=self.retry_config,
         )
         response.raise_for_status()
         return response.json()
@@ -404,7 +418,7 @@ class APIAutomation:
                 to_perform_requests.append(json.loads(temp_params_))
 
         # Making use of niquests multiplexed feature.
-        with niquests.Session(multiplexed=True) as s:
+        with niquests.Session(multiplexed=True, timeout=Constants.API_DEFAULT_TIMEOUT, retries=self.retry_config) as s:
             for to_perform_request in to_perform_requests:
                 response_ = s.request(
                     method=method,
@@ -486,8 +500,8 @@ class APIExtractor:
         ]
 
         try:
-            Path(inbound_location).mkdir(parents=True)
-        except:
+            Path(inbound_location).mkdir(parents=True, exist_ok=True)
+        except OSError:
             pass
 
         save_file_name = FileNameGenerator.file_name_generator(file_pattern)

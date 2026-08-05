@@ -1,4 +1,6 @@
 import traceback
+import glob
+import shutil
 
 from data_dallion_framework.Common import FileNameGenerator, OrchestrationProcess
 from data_dallion_framework.Common.Models.Logs import logDataAcquisitionDetail
@@ -56,8 +58,8 @@ class DatabaseExtractor:
         ]
 
         try:
-            Path(inbound_location).mkdir(parents=True)
-        except:
+            Path(inbound_location).mkdir(parents=True, exist_ok=True)
+        except OSError:
             pass
 
         save_file_name = FileNameGenerator.file_name_generator(file_pattern)
@@ -77,16 +79,23 @@ class DatabaseExtractor:
                     .load()
                 )
 
-                results = [row.asDict() for row in df.collect()]
+                # Write JDBC DataFrame directly using Spark native writer to a temp folder
+                temp_dir = f"{file_save_name}_temp"
+                
+                writer = df.coalesce(1).write.mode("overwrite")
+                if outbound_source_file_format.lower() == "csv":
+                    writer = writer.format("csv").option("header", "true").option("delimiter", outbound_file_delimiter)
+                else:
+                    writer = writer.format(outbound_source_file_format.lower())
+                writer.save(temp_dir)
 
-                with open(file_save_name, mode="w", newline="") as file:
-                    writer = csv.DictWriter(
-                        file,
-                        fieldnames=df.columns,
-                        delimiter=outbound_file_delimiter,
-                    )
-                    writer.writeheader()
-                    writer.writerows(results)
+                # Locate and move the single part file to the final file_save_name
+                part_files = glob.glob(f"{temp_dir}/part-*")
+                if part_files:
+                    shutil.move(part_files[0], file_save_name)
+                
+                # Cleanup temp directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
 
                 with OrchestrationProcess.OrchestrationProcess() as orch_process:
                     orch_process.insert_log_data_acquisition_detail(

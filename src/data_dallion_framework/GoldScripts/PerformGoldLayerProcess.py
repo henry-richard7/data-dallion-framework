@@ -34,6 +34,9 @@ class GoldLayerProcess:
                 process_id=process_id, dataset_type="GOLD"
             )
 
+        if not self.gold_datasets:
+            return
+
         with ThreadPoolExecutor(
             max_workers=min(5, len(self.gold_datasets))
         ) as executor:

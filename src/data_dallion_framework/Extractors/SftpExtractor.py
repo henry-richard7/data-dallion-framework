@@ -48,8 +48,8 @@ class SFTPExtractor:
         ]
 
         try:
-            Path(inbound_location).mkdir(parents=True)
-        except:
+            Path(inbound_location).mkdir(parents=True, exist_ok=True)
+        except OSError:
             pass
 
         ssh = paramiko.SSHClient()
@@ -68,6 +68,7 @@ class SFTPExtractor:
             username=connection_config.get("user"),
             allow_agent=True,
             pkey=mykey,
+            timeout=10.0,
         )
 
         sftp = ssh.open_sftp()

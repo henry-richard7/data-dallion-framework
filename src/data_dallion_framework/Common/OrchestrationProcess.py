@@ -50,6 +50,7 @@ class BackendSettings(BaseSettings):
     datacraft_framework_home: Optional[str] = Field(
         default=str(Path.home() / "datacraft_framework")
     )
+    auto_create_schema: bool = Field(default=True, alias="db_auto_create_schema")
 
     @model_validator(mode="after")
     def set_defaults(self):
@@ -101,7 +102,8 @@ def _get_session_factory() -> sessionmaker:
                 settings = BackendSettings()
                 connect_args = loads(settings.connect_args) if settings.connect_args else {}
                 _engine = create_engine(settings.connection_string, connect_args=connect_args)
-                SQLModel.metadata.create_all(bind=_engine)
+                if settings.auto_create_schema:
+                    SQLModel.metadata.create_all(bind=_engine)
                 _SessionFactory = sessionmaker(bind=_engine, class_=Session)
 
     return _SessionFactory
