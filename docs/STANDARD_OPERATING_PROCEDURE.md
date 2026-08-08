@@ -642,7 +642,9 @@ The framework performs incremental file ingestion using control logs:
 1. It lists files in `inbound_location` (`files_in_inbound`).
 2. It fetches all successfully processed files from `logRawProcessDtl` (`raw_completed_files`).
 3. It finds new files to process using:
-   $$\text{new\_files} = \text{files\_in\_inbound} - \text{raw\_completed\_files}$$
+   ```text
+   new_files = files_in_inbound - raw_completed_files
+   ```
 4. It filters the remaining files by matching their names against the regex pattern specified in `inbound_file_pattern`.
 
 ### Gold Layer Slowly Changing Dimension (SCD) Type 2 Logic
@@ -670,10 +672,10 @@ DQM rules are evaluated in parallel using PySpark. Checks are categorized by cri
 | **`Blank`** | — | `trim(column_name) != ''` | Fails if the column value is blank or empty. |
 | **`Length`** | Comparison op & length (e.g. `>=10`, `=5`) | `length(column_name) >= 10` | Validates column string length. |
 | **`Length-Range`** | Interval tuple list (e.g. `[2, 12]`) | `length(column_name) BETWEEN 2 AND 12` | Fails if string length falls outside the range. |
-| **`Integer`** | — | `column_name RLIKE '^-?[0-9]+$'` | Validates if string contains only integer values. |
+| **`Integer`** | — | `column_name RLIKE '^-?[0-9]+\$'` | Validates if string contains only integer values. |
 | **`Decimal`** | — | `column_name RLIKE '^-?([0-9]+\\.[0-9]+...`| Validates string representation of float/decimals. |
-| **`Date`** | Code lookup key (e.g. `YYYYMMDD`) | `column_name RLIKE '^\d{4}\d{2}\d{2}$'` | Regex check to confirm matching date formats. |
-| **`Regex`** | Custom Regex (e.g. `^[A-Z]{3}$`) | `column_name RLIKE '^[A-Z]{3}$'` | Evaluates field against custom regex syntax. |
+| **`Date`** | Code lookup key (e.g. `YYYYMMDD`) | `column_name RLIKE '^\d{4}\d{2}\d{2}\$'` | Regex check to confirm matching date formats. |
+| **`Regex`** | Custom Regex (e.g. `^[A-Z]{3}\$`) | `column_name RLIKE '^[A-Z]{3}\$'` | Evaluates field against custom regex syntax. |
 | **`Domain`** | Comma-separated list (e.g. `US,CA,MX`) | `column_name IN ('US', 'CA', 'MX')` | Validates if value exists inside domain dataset. |
 | **`Custom`** | Spark SQL string (e.g. `price > tax`) | `price > tax` | Evaluates arbitrary Spark expressions. |
 | **`Unique`** | PK column list (e.g. `id` or `id,date`) | Spark Window: `row_number() == 1` | Flags duplicate keys using window function. |
