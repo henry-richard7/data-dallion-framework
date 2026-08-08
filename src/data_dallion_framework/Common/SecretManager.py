@@ -116,7 +116,21 @@ def get_vault_secret(secret_path: str) -> str:
     vault_token = os.environ.get("VAULT_TOKEN")
     
     if not vault_token:
-        raise ValueError("VAULT_TOKEN environment variable is not set.")
+        role_id = os.environ.get("VAULT_ROLE_ID")
+        if role_id:
+            secret_id = os.environ.get("VAULT_SECRET_ID")
+            approle_path = os.environ.get("VAULT_APPROLE_PATH", "approle")
+            url = f"{vault_addr}/v1/auth/{approle_path}/login"
+            data = {"role_id": role_id}
+            if secret_id:
+                data["secret_id"] = secret_id
+                
+            res = niquests.post(url, json=data, timeout=10)
+            res.raise_for_status()
+            vault_token = res.json()["auth"]["client_token"]
+            os.environ["VAULT_TOKEN"] = vault_token
+        else:
+            raise ValueError("VAULT_TOKEN or VAULT_ROLE_ID environment variable must be set.")
         
     parts = secret_path.split("/", 1)
     if len(parts) == 2:

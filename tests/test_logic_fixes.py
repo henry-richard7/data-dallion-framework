@@ -200,3 +200,82 @@ def test_secret_manager_hashicorp_vault(monkeypatch):
         headers={"X-Vault-Token": "fake_vault_token"},
         timeout=10
     )
+
+def test_secret_manager_hashicorp_vault_approle(monkeypatch):
+    import os
+    monkeypatch.delenv("VAULT_TOKEN", raising=False)
+    monkeypatch.setenv("VAULT_ADDR", "http://127.0.0.1:8200")
+    monkeypatch.setenv("VAULT_ROLE_ID", "fake_role_id")
+    monkeypatch.setenv("VAULT_SECRET_ID", "fake_secret_id")
+    monkeypatch.setenv("VAULT_APPROLE_PATH", "custom-approle")
+    
+    mock_post = MagicMock()
+    mock_post.return_value.json.return_value = {
+        "auth": {"client_token": "approle_client_token"}
+    }
+    monkeypatch.setattr("niquests.post", mock_post)
+    
+    mock_get = MagicMock()
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "data": {"data": {"password": "approle_secret_password"}}
+    }
+    monkeypatch.setattr("niquests.get", mock_get)
+    
+    res = resolve_secret("vault:secret/db:password")
+    assert res == "approle_secret_password"
+    
+    # Verify post was called correctly
+    mock_post.assert_called_with(
+        "http://127.0.0.1:8200/v1/auth/custom-approle/login",
+        json={"role_id": "fake_role_id", "secret_id": "fake_secret_id"},
+        timeout=10
+    )
+    
+    # Verify get was called with the retrieved token
+    mock_get.assert_called_with(
+        "http://127.0.0.1:8200/v1/secret/data/db",
+        headers={"X-Vault-Token": "approle_client_token"},
+        timeout=10
+    )
+    
+    # Verify the token is now cached in the environment
+    assert os.environ.get("VAULT_TOKEN") == "approle_client_token"
+
+def test_secret_manager_hashicorp_vault_approle_minimal(monkeypatch):
+    monkeypatch.delenv("VAULT_TOKEN", raising=False)
+    monkeypatch.setenv("VAULT_ADDR", "http://127.0.0.1:8200")
+    monkeypatch.setenv("VAULT_ROLE_ID", "fake_role_id")
+    monkeypatch.delenv("VAULT_SECRET_ID", raising=False)
+    monkeypatch.delenv("VAULT_APPROLE_PATH", raising=False)
+    
+    mock_post = MagicMock()
+    mock_post.return_value.json.return_value = {
+        "auth": {"client_token": "minimal_client_token"}
+    }
+    monkeypatch.setattr("niquests.post", mock_post)
+    
+    mock_get = MagicMock()
+    mock_get.return_value.status_code = 200
+    mock_get.return_value.json.return_value = {
+        "data": {"data": {"password": "minimal_secret_password"}}
+    }
+    monkeypatch.setattr("niquests.get", mock_get)
+    
+    res = resolve_secret("vault:secret/db:password")
+    assert res == "minimal_secret_password"
+    
+    mock_post.assert_called_with(
+        "http://127.0.0.1:8200/v1/auth/approle/login",
+        json={"role_id": "fake_role_id"},
+        timeout=10
+    )
+
+def test_secret_manager_hashicorp_vault_missing_auth(monkeypatch):
+    monkeypatch.delenv("VAULT_TOKEN", raising=False)
+    monkeypatch.delenv("VAULT_ROLE_ID", raising=False)
+    
+    import pytest
+    with pytest.raises(ValueError, match="VAULT_TOKEN or VAULT_ROLE_ID environment variable must be set."):
+        resolve_secret("vault:secret/db:password")
+

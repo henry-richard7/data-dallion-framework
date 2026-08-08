@@ -131,9 +131,16 @@ INSERT INTO ctlDataAcquisitionConnectionMaster (
 * **Managed Identity (MSI):** Auto-detected if deployed on Azure VMs, Container Apps, or Kubernetes nodes.
 
 ### C. HashiCorp Vault
-* **Authentication:** Token-based authentication.
-* **Environment variables:**
+* **Authentication:** Token-based authentication or AppRole authentication.
+* **Environment variables (Token Authentication):**
   ```bash
   VAULT_ADDR=https://vault.company.com:8200
   VAULT_TOKEN=hvs.xxxxxxxxxxxxxxxxxxxxxx
+  ```
+* **Environment variables (AppRole Authentication):**
+  ```bash
+  VAULT_ADDR=https://vault.company.com:8200
+  VAULT_ROLE_ID=your-role-id
+  VAULT_SECRET_ID=your-secret-id
+  VAULT_APPROLE_PATH=approle  # Optional, defaults to "approle"
   ```

@@ -165,6 +165,13 @@ To enable the runtime decryption of credentials using cloud KMS systems or local
   VAULT_ADDR=https://vault.company.com:8200
   VAULT_TOKEN=hvs.your_vault_authentication_token
   ```
+* **AppRole Authentication:** Alternatively, you can use AppRole authentication:
+  ```env
+  VAULT_ADDR=https://vault.company.com:8200
+  VAULT_ROLE_ID=your-role-id
+  VAULT_SECRET_ID=your-secret-id
+  VAULT_APPROLE_PATH=approle  # Optional, defaults to "approle"
+  ```
 
 ### D. Local Symmetric Encryption Fallback
 * **Encryption Key Configuration:** Export the base64-encoded 32-byte symmetric key:
