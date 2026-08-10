@@ -26,7 +26,8 @@
 - [Metadata models](#metadata-models)
 - [Supported connectors](#supported-connectors)
 - [Data quality checks](#data-quality-checks)
-- [Standard Operating Procedure (SOP)](docs/STANDARD_OPERATING_PROCEDURE.md)
+- [Business Standard Operating Procedure (SOP)](docs/BUSINESS_SOP.md)
+- [Technical Standard Operating Procedure (SOP)](docs/TECHNICAL_SOP.md)
 - [KMS & Secrets Guide](docs/KMS_DOCUMENTATION.md)
 - [Contributing](#contributing)
 - [License](#license)
@@ -36,6 +37,8 @@
 ## Architecture
 
 DataDallion strictly follows the Medallion Architecture. Data moves through three layers, each adding a level of quality and structure.
+
+For a comprehensive overview of the business goals and data flow, see the [Business SOP](docs/BUSINESS_SOP.md). For detail on developer execution models and sequence flows, see the [Technical SOP](docs/TECHNICAL_SOP.md).
 
 ```mermaid
 graph TD
@@ -74,12 +77,12 @@ graph TD
 
 ## Features
 
-- **Metadata-driven orchestration** — define sources, schemas, quality rules, and transformations entirely through configuration. No pipeline code changes required when onboarding a new dataset.
-- **Multi-source ingestion** — built-in connectors for REST APIs, SFTP, AWS S3, Salesforce, Veeva, and any JDBC-compatible database.
-- **Automated data quality** — a pluggable DQM engine validates nullability, data types, string patterns, domain values, uniqueness, and custom SQL rules. Critical failures halt the pipeline; warnings are logged and pass through.
-- **SCD Type 2 support** — Gold-layer transformations maintain full change history using Delta Lake merge with checksum-based change detection.
-- **Parallel execution** — Bronze, Silver, and Gold layers each process datasets concurrently using `ThreadPoolExecutor`.
-- **Comprehensive audit trail** — every extraction, standardization, DQM check, and transformation step is logged to the metadata store with batch IDs, start/end times, and exception details.
+- **Metadata-driven orchestration** — define sources, schemas, quality rules, and transformations entirely through configuration. No pipeline code changes required when onboarding a new dataset. See the [Onboarding SQL Guide](docs/TECHNICAL_SOP.md#3-onboarding-step-by-step-sql-guide).
+- **Multi-source ingestion** — built-in connectors for REST APIs, SFTP, AWS S3, Salesforce, Veeva, and any JDBC-compatible database. Read more in the [Metadata Schema Documentation](docs/TECHNICAL_SOP.md#2-relational-metadata-schema-all-13-tables).
+- **Automated data quality** — a pluggable DQM engine validates nullability, data types, string patterns, domain values, uniqueness, and custom SQL rules. Critical failures halt the pipeline; warnings are logged and pass through. See the [DQM Framework Details](docs/TECHNICAL_SOP.md#6-data-quality-management-dqm-validation-framework).
+- **SCD Type 2 support** — Gold-layer transformations maintain full change history using Delta Lake merge with checksum-based change detection. Learn about [SCD Type 2 Logic](docs/TECHNICAL_SOP.md#gold-layer-slowly-changing-dimension-scd-type-2-logic).
+- **Parallel execution** — Bronze, Silver, and Gold layers each process datasets concurrently using `ThreadPoolExecutor`. See [Execution Model Details](docs/TECHNICAL_SOP.md#1-technical-standpoint--execution-model).
+- **Comprehensive audit trail** — every extraction, standardization, DQM check, and transformation step is logged to the metadata store with batch IDs, start/end times, and exception details. See [Audit & Log Tables](docs/TECHNICAL_SOP.md#b-audit--log-tables).
 - **Pluggable backends** — the metadata store works with SQLite (zero-config default), MySQL, PostgreSQL, and MariaDB.
 
 ---
@@ -238,7 +241,7 @@ The DQM engine supports the following check types, configurable per column in `c
 | `Length-Range` | Validates string length falls within a range | `[5, 20]` |
 | `Integer` | Validates value is a valid integer | — |
 | `Decimal` | Validates value is a valid decimal number | — |
-| `Date` | Validates value matches a date format | `%Y-%m-%dT%H:%M:%S+0000` |
+| `Date` | Validates value matches a date format | `yyyy-MM-dd'T'HH:mm:ssZ` |
 | `Regex` | Validates value matches a regular expression | `^[A-Z]{2}[0-9]{6}$` |
 | `Domain` | Validates value is within an allowed set | `ACTIVE,INACTIVE,PENDING` |
 | `Unique` | Validates uniqueness across one or more columns | `order_id,product_id` |

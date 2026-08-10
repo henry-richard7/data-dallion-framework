@@ -279,3 +279,18 @@ def test_secret_manager_hashicorp_vault_missing_auth(monkeypatch):
     with pytest.raises(ValueError, match="VAULT_TOKEN or VAULT_ROLE_ID environment variable must be set."):
         resolve_secret("vault:secret/db:password")
 
+from data_dallion_framework.Common.RegexDateFormats import get_date_regex
+
+def test_regex_date_formats_spark_and_python():
+    # Test Spark style formats
+    assert get_date_regex("yyyy-MM-dd'T'HH:mm:ssZ") == r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\+[0-9]{4})"
+    assert get_date_regex("yyyy") == r"([0-9]{4})"
+    assert get_date_regex("MM/dd/yyyy") == r"([0-9]{2}/[0-9]{2}/[0-9]{4})"
+    assert get_date_regex("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'") == r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}.[0-9]{3}Z)"
+    
+    # Test fallback legacy Python formats
+    assert get_date_regex("%Y-%m-%dT%H:%M:%S+0000") == r"([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\+[0-9]{4})"
+    assert get_date_regex("%Y") == r"([0-9]{4})"
+    assert get_date_regex("MM/DD/YYYY") == r"([0-9]{2}/[0-9]{2}/[0-9]{4})"
+
+
